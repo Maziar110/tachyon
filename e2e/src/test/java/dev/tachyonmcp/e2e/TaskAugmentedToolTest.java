@@ -25,7 +25,7 @@ class TaskAugmentedToolTest extends AbstractStatelessMcpE2eTest {
     @Test
     void taskAugmentedCallReturnsCreateTaskResultBeforeToolCompletes() throws Exception {
         var sleepMs = 2000;
-        startServer(it -> it.tool(new SleepingSyncTool(sleepMs)));
+        startServerWith(s -> s.tools().register(new SleepingSyncTool(sleepMs)));
         try (var client = createTestClient()) {
             client.initialize();
 
@@ -43,7 +43,7 @@ class TaskAugmentedToolTest extends AbstractStatelessMcpE2eTest {
 
     @Test
     void taskAugmentedSyncToolTaskCompletesAfterToolFinishes() throws Exception {
-        startServer(it -> it.tool(new SleepingSyncTool(500)));
+        startServerWith(s -> s.tools().register(new SleepingSyncTool(500)));
         try (var client = createTestClient()) {
             client.initialize();
 
@@ -91,17 +91,19 @@ class TaskAugmentedToolTest extends AbstractStatelessMcpE2eTest {
     @Test
     void shouldCancelTask() throws Exception {
         var started = new java.util.concurrent.CountDownLatch(1);
+        var interrupted = new java.util.concurrent.CountDownLatch(1);
         var handler = ToolHandler.of(b -> b.name("task_tool").taskSupport(TaskSupport.OPTIONAL), (context, request) -> {
             started.countDown();
             try {
                 Thread.sleep(5000);
             } catch (InterruptedException e) {
+                interrupted.countDown();
                 Thread.currentThread().interrupt();
             }
             return ToolResult.text("done");
         });
 
-        startServer(it -> it.tool(handler));
+        startServerWith(s -> s.tools().register(handler));
         try (var client = createTestClient()) {
             client.initialize();
 
@@ -121,6 +123,8 @@ class TaskAugmentedToolTest extends AbstractStatelessMcpE2eTest {
                 {"jsonrpc":"2.0","id":3,"method":"tasks/cancel","params":{"taskId":"%s"}}
                 """.formatted(taskId));
             assertThatJson(cancelJson).inPath("$.result.status").isEqualTo("cancelled");
+            assertThat(interrupted.await(2, java.util.concurrent.TimeUnit.SECONDS))
+                    .isTrue();
 
             var getJson = client.sendRpc("""
                 {"jsonrpc":"2.0","id":4,"method":"tasks/get","params":{"taskId":"%s"}}
@@ -138,7 +142,7 @@ class TaskAugmentedToolTest extends AbstractStatelessMcpE2eTest {
             release.await();
             return ToolResult.text("done");
         });
-        startServer(it -> it.tool(handler));
+        startServerWith(s -> s.tools().register(handler));
         try (var client = createTestClient()) {
             client.initialize();
 
@@ -195,7 +199,7 @@ class TaskAugmentedToolTest extends AbstractStatelessMcpE2eTest {
                 ToolHandler.of(b -> b.name("invalid-params").taskSupport(TaskSupport.OPTIONAL), (context, request) -> {
                     throw new IllegalArgumentException("sensitive internal detail");
                 });
-        startServer(it -> it.tool(handler));
+        startServerWith(s -> s.tools().register(handler));
         try (var client = createTestClient()) {
             client.initialize();
 
