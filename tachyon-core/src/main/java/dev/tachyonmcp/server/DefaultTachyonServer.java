@@ -32,13 +32,12 @@ import dev.tachyonmcp.server.handlers.LoggingHandlers;
 import dev.tachyonmcp.server.handlers.PingHandler;
 import dev.tachyonmcp.server.internal.NotificationLogSupport;
 import dev.tachyonmcp.server.internal.ServerEngine;
-import dev.tachyonmcp.server.json.Jackson3JsonFactory;
 import dev.tachyonmcp.server.json.JacksonPayloadSerde;
-import dev.tachyonmcp.server.json.JsonSchemaFactory;
 import dev.tachyonmcp.server.json.JsonSchemaValidator;
 import dev.tachyonmcp.server.json.NetworkntJsonSchemaValidator;
 import dev.tachyonmcp.server.json.PayloadDeserializer;
 import dev.tachyonmcp.server.json.PayloadSerializer;
+import dev.tachyonmcp.server.json.spi.JsonSchemaFactory;
 import dev.tachyonmcp.server.session.SessionEvent;
 import dev.tachyonmcp.server.session.SessionEventStore;
 import dev.tachyonmcp.server.session.SessionIdGenerator;
@@ -56,6 +55,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.ServiceLoader;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -245,7 +245,7 @@ final class DefaultTachyonServer implements ServerEngine {
         final PayloadDeserializer payloadDeserializer1 =
                 payloadDeserializer != null ? payloadDeserializer : defaultSerde;
         final JsonSchemaFactory<String> schemaFactory1 =
-                schemaFactory != null ? schemaFactory : Jackson3JsonFactory.INSTANCE;
+                schemaFactory != null ? schemaFactory : discoverSchemaFactory();
         var caps = config.capabilities();
         this.toolRegistry = new DefaultToolRegistry(
                 inputValidator1,
@@ -276,6 +276,26 @@ final class DefaultTachyonServer implements ServerEngine {
     private static ExecutorService defaultExecutor() {
         return Executors.newThreadPerTaskExecutor(
                 Thread.ofVirtual().name("tachyon-", 0).factory());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static JsonSchemaFactory<String> discoverSchemaFactory() {
+        JsonSchemaFactory<String> found = null;
+        for (var provider : ServiceLoader.load(JsonSchemaFactory.class)) {
+            if (provider.sourceType() == String.class) {
+                if (found != null) {
+                    throw new IllegalStateException("Duplicate JsonSchemaFactory<String> implementations found: "
+                            + found.getClass().getName() + " and "
+                            + provider.getClass().getName());
+                }
+                found = (JsonSchemaFactory<String>) provider;
+            }
+        }
+        if (found == null) {
+            throw new IllegalStateException(
+                    "No JsonSchemaFactory<String> implementation registered via ServiceLoader.");
+        }
+        return found;
     }
 
     @Override

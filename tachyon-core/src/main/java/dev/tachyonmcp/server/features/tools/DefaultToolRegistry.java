@@ -30,13 +30,13 @@ import dev.tachyonmcp.server.features.tasks.TaskEntry;
 import dev.tachyonmcp.server.features.tasks.TaskSupport;
 import dev.tachyonmcp.server.json.JsonDocument;
 import dev.tachyonmcp.server.json.JsonSchema;
-import dev.tachyonmcp.server.json.JsonSchemaFactory;
 import dev.tachyonmcp.server.json.JsonSchemaUtils;
 import dev.tachyonmcp.server.json.JsonSchemaValidator;
 import dev.tachyonmcp.server.json.JsonUtils;
 import dev.tachyonmcp.server.json.PayloadDeserializer;
 import dev.tachyonmcp.server.json.PayloadSerializer;
 import dev.tachyonmcp.server.json.SchemaValidationError;
+import dev.tachyonmcp.server.json.spi.JsonSchemaFactory;
 import dev.tachyonmcp.server.session.DispatchContext;
 import dev.tachyonmcp.transport.jsonrpc.JsonRpcCodec;
 import java.time.Duration;
@@ -480,7 +480,7 @@ public class DefaultToolRegistry extends AbstractRegistry<ToolDescriptor, ToolHa
         }
 
         private void validateOutput(@Nullable JsonSchema schema, ToolResult result) {
-            if (schema == null || outputValidator == JsonSchemaValidator.NOOP) return;
+            if (schema == null || outputValidator == JsonSchemaValidator.noop()) return;
             var inner = result instanceof ToolResult.WithMeta wm ? wm.inner() : result;
             if (!(inner instanceof ToolResult.Success s)) return;
             var contentNode = JsonUtils.valueToObjectNode(s.structuredValue(), payloadSerializer);
