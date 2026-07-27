@@ -3,6 +3,7 @@ package dev.tachyonmcp.server;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 import dev.tachyonmcp.server.domain.PromptMessage;
 import dev.tachyonmcp.server.domain.TextResourceContents;
@@ -75,8 +76,8 @@ class ServerBuilderTest {
 
             assertThat(server.tools().find("sync-tool")).isPresent();
             assertThat(server.resources().find("sync-resource")).isPresent();
-            assertThat(((DefaultTachyonServer) server).resolveCapabilities().prompts())
-                    .isNotNull();
+            assertThat(server.resources().findTemplate("sync-template")).isPresent();
+            assertThat(server.prompts().find("sync-prompt")).isPresent();
         }
     }
 
@@ -106,8 +107,8 @@ class ServerBuilderTest {
 
             assertThat(server.tools().find("async-tool")).isPresent();
             assertThat(server.resources().find("async-resource")).isPresent();
-            assertThat(((DefaultTachyonServer) server).resolveCapabilities().prompts())
-                    .isNotNull();
+            assertThat(server.resources().findTemplate("async-template")).isPresent();
+            assertThat(server.prompts().find("async-prompt")).isPresent();
         }
     }
 
@@ -187,5 +188,19 @@ class ServerBuilderTest {
                         "asyncPromptCompletion",
                         "resourceCompletion",
                         "asyncResourceCompletion");
+    }
+
+    @Test
+    void builderHasNoStartMethod() {
+        assertThat(ServerBuilder.class.getDeclaredMethods())
+                .extracting(method -> method.getName())
+                .doesNotContain("start");
+    }
+
+    @Test
+    void portThrowsBeforeStart() {
+        try (var server = TachyonServer.builder().build()) {
+            assertThatIllegalStateException().isThrownBy(server::port);
+        }
     }
 }
