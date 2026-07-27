@@ -4,7 +4,9 @@ package dev.tachyonmcp.kotlin.server.features.prompts
 import dev.tachyonmcp.kotlin.server.config.PromptScope
 import dev.tachyonmcp.kotlin.server.features.CoroutineRuntime
 import dev.tachyonmcp.runtime.InteractionContext
+import dev.tachyonmcp.server.domain.PromptMessage
 import dev.tachyonmcp.server.features.prompts.AsyncPromptHandler
+import dev.tachyonmcp.server.features.prompts.PromptDescriptor
 import dev.tachyonmcp.server.features.prompts.PromptRequest
 import dev.tachyonmcp.server.features.prompts.PromptResult
 import kotlinx.coroutines.CoroutineName
@@ -14,9 +16,9 @@ import kotlinx.coroutines.CoroutineName
  */
 @JvmSynthetic
 internal fun promptHandler(
-    descriptor: dev.tachyonmcp.server.features.prompts.PromptDescriptor,
+    descriptor: PromptDescriptor,
     runtime: CoroutineRuntime,
-    block: suspend PromptScope.() -> List<dev.tachyonmcp.server.domain.PromptMessage>,
+    block: suspend PromptScope.() -> List<PromptMessage>,
 ): AsyncPromptHandler {
     val coroutineName = CoroutineName("prompt:${descriptor.name()}")
     return AsyncPromptHandler {

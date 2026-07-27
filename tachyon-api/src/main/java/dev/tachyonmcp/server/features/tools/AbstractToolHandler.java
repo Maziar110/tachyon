@@ -22,11 +22,21 @@ public abstract class AbstractToolHandler implements ToolHandler {
 
     private final ToolDescriptor descriptor;
 
+    /**
+     * Creates a handler with a pre-built descriptor.
+     *
+     * @param descriptor the tool descriptor
+     */
     public AbstractToolHandler(ToolDescriptor descriptor) {
         Objects.requireNonNull(descriptor, "ToolDescriptor must not be null");
         this.descriptor = descriptor;
     }
 
+    /**
+     * Creates a handler using a descriptor builder configurer.
+     *
+     * @param descriptorConfigurer configures the tool descriptor builder
+     */
     public AbstractToolHandler(Consumer<ToolDescriptor.Builder> descriptorConfigurer) {
         this(configure(descriptorConfigurer));
     }
@@ -37,6 +47,11 @@ public abstract class AbstractToolHandler implements ToolHandler {
         return builder.build();
     }
 
+    /**
+     * Creates a handler with a descriptor of the given name.
+     *
+     * @param name the tool name
+     */
     public AbstractToolHandler(String name) {
         this(ToolDescriptor.builder().name(name).build());
     }
@@ -64,6 +79,11 @@ public abstract class AbstractToolHandler implements ToolHandler {
 
     /**
      * Executes the tool synchronously with the full request. Sync handlers override this method.
+     *
+     * @param context the interaction context
+     * @param request the tool invocation request
+     * @return the tool result
+     * @throws Exception on handler failure
      */
     public ToolResult handle(InteractionContext context, ToolRequest request) throws Exception {
         assumeVirtualThread(); // don't remove this guardrail!

@@ -6,6 +6,8 @@
 package dev.tachyonmcp.kotlin.server.features.resources
 
 import dev.tachyonmcp.kotlin.server.TachyonDsl
+import dev.tachyonmcp.server.domain.Annotations
+import dev.tachyonmcp.server.domain.Icon
 import dev.tachyonmcp.server.features.resources.ResourceTemplateDescriptor
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
@@ -35,10 +37,10 @@ public class ResourceTemplateDescriptorBuilder
         public var extensionId: String? = null
 
         /** Optional presentation hints. */
-        public var annotations: dev.tachyonmcp.server.domain.Annotations? = null
+        public var annotations: Annotations? = null
 
         /** Associated icons. */
-        public var icons: List<dev.tachyonmcp.server.domain.Icon>? = null
+        public var icons: List<Icon>? = null
 
         @PublishedApi
         internal fun build(): ResourceTemplateDescriptor =

@@ -3,6 +3,7 @@ package dev.tachyonmcp.server.features.tools;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.tachyonmcp.server.domain.TextContent;
 import dev.tachyonmcp.server.features.HandlerFutures;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -80,7 +81,7 @@ class AsyncToolHandlerTest {
         assertThat(result).isInstanceOf(ToolResult.Success.class);
         assertThat(((ToolResult.Success) result).content())
                 .singleElement()
-                .satisfies(c -> assertThat(c).isInstanceOf(dev.tachyonmcp.server.domain.TextContent.class));
+                .satisfies(c -> assertThat(c).isInstanceOf(TextContent.class));
     }
 
     @Test
@@ -111,7 +112,7 @@ class AsyncToolHandlerTest {
         var request = ToolRequest.builder().name("greeter").build();
         var result = (ToolResult.Success)
                 handler.handleAsync(null, request).toCompletableFuture().get();
-        var text = ((dev.tachyonmcp.server.domain.TextContent) result.content().getFirst()).text();
+        var text = ((TextContent) result.content().getFirst()).text();
         assertThat(text).isEqualTo("greeter");
     }
 }

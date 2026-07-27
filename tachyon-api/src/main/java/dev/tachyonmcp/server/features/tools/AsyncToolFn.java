@@ -2,6 +2,7 @@
 package dev.tachyonmcp.server.features.tools;
 
 import dev.tachyonmcp.runtime.InteractionContext;
+import dev.tachyonmcp.server.domain.Args;
 import java.util.concurrent.CompletionStage;
 
 /**
@@ -10,7 +11,7 @@ import java.util.concurrent.CompletionStage;
  * {@code AsyncResourceHandler} and {@code AsyncPromptHandler}.
  *
  * <p>Receives the full {@link ToolRequest} — call {@link ToolRequest#arguments()} for parsed
- * {@link dev.tachyonmcp.server.domain.Args}, or read {@link ToolRequest#progressToken()}
+ * {@link Args}, or read {@link ToolRequest#progressToken()}
  * or {@link ToolRequest#task()} directly when needed.
  *
  * @author Konstantin Pavlov
@@ -18,5 +19,12 @@ import java.util.concurrent.CompletionStage;
 @FunctionalInterface
 public interface AsyncToolFn {
 
+    /**
+     * Executes the tool function asynchronously with the given request.
+     *
+     * @param ctx     the interaction context
+     * @param request the tool request containing arguments and metadata
+     * @return a future that completes with the tool result
+     */
     CompletionStage<? extends ToolResult> apply(InteractionContext ctx, ToolRequest request);
 }

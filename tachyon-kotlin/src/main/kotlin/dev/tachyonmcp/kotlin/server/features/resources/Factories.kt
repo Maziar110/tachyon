@@ -6,6 +6,8 @@
 
 package dev.tachyonmcp.kotlin.server.features.resources
 
+import dev.tachyonmcp.server.domain.Annotations
+import dev.tachyonmcp.server.domain.Icon
 import dev.tachyonmcp.server.features.resources.ResourceDescriptor
 
 /**
@@ -26,9 +28,9 @@ public fun ResourceDescriptor(
     description: String? = null,
     mimeType: String? = null,
     title: String? = null,
-    annotations: dev.tachyonmcp.server.domain.Annotations? = null,
+    annotations: Annotations? = null,
     size: Long? = null,
-    icons: List<dev.tachyonmcp.server.domain.Icon>? = null,
+    icons: List<Icon>? = null,
 ): ResourceDescriptor =
     ResourceDescriptor.of(
         name,

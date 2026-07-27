@@ -43,7 +43,7 @@ import org.junit.jupiter.params.provider.MethodSource
 import tools.jackson.databind.ObjectMapper
 import java.math.BigDecimal
 import java.util.stream.Stream
-import dev.tachyonmcp.server.json.JsonSchema as JavaJsonSchema
+import dev.tachyonmcp.json.JsonSchema as JavaJsonSchema
 
 internal class KotlinApiTest {
     // region: Overload resolution — all shapes compile

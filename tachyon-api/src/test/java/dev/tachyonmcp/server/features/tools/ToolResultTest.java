@@ -3,9 +3,8 @@ package dev.tachyonmcp.server.features.tools;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.tachyonmcp.server.domain.*;
 import dev.tachyonmcp.server.domain.InputRequest;
-import dev.tachyonmcp.server.domain.TextContent;
-import dev.tachyonmcp.server.domain.UrlInputRequest;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -83,7 +82,7 @@ class ToolResultTest {
 
     @Test
     void successContentIsDefensiveCopy() {
-        var list = new java.util.ArrayList<dev.tachyonmcp.server.domain.ContentBlock>();
+        var list = new java.util.ArrayList<ContentBlock>();
         list.add(TextContent.of("a"));
         var r = new ToolResult.Success(null, list);
         list.add(TextContent.of("b"));
@@ -150,7 +149,6 @@ class ToolResultTest {
         assertThat(r).isInstanceOf(ToolResult.Success.class);
         var s = (ToolResult.Success) r;
         assertThat(s.structured()).contains("data");
-        assertThat(((dev.tachyonmcp.server.domain.TextContent) s.content().getFirst()).text())
-                .isEqualTo("custom text");
+        assertThat(((TextContent) s.content().getFirst()).text()).isEqualTo("custom text");
     }
 }

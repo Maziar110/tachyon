@@ -2,7 +2,11 @@
 package dev.tachyonmcp.server.json;
 
 import dev.tachyonmcp.annotations.InternalApi;
-import dev.tachyonmcp.server.json.spi.JsonSchemaFactory;
+import dev.tachyonmcp.json.JsonDocument;
+import dev.tachyonmcp.json.JsonSchema;
+import dev.tachyonmcp.json.JsonSchemaValidator;
+import dev.tachyonmcp.json.SchemaValidationError;
+import dev.tachyonmcp.json.spi.JsonSchemaFactory;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.databind.JsonNode;

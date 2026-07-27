@@ -2,6 +2,7 @@
 package dev.tachyonmcp.kotlin.server.config
 
 import dev.tachyonmcp.annotations.ExperimentalApi
+import dev.tachyonmcp.json.JsonSchema
 import dev.tachyonmcp.kotlin.server.TachyonDsl
 import dev.tachyonmcp.kotlin.server.features.CoroutineRuntime
 import dev.tachyonmcp.kotlin.server.json.KxSerializationSerde
@@ -20,7 +21,6 @@ import dev.tachyonmcp.server.features.resources.ResourceDescriptor
 import dev.tachyonmcp.server.features.resources.ResourceTemplateDescriptor
 import dev.tachyonmcp.server.features.tools.ToolDescriptor
 import dev.tachyonmcp.server.features.tools.ToolResult
-import dev.tachyonmcp.server.json.JsonSchema
 import io.netty.channel.ChannelPipeline
 import kotlinx.serialization.json.JsonObject
 import kotlin.contracts.ExperimentalContracts

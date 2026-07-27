@@ -4,7 +4,13 @@ package dev.tachyonmcp.runtime;
 import dev.tachyonmcp.annotations.InternalApi;
 import java.util.Objects;
 
-/** A single Server-Sent Event with an ID, event type, and data payload. */
+/**
+ * A single Server-Sent Event with an ID, event type, and data payload.
+ *
+ * @param id    the event identifier
+ * @param event the event type
+ * @param data  the event data payload
+ */
 @InternalApi
 public record SseEvent(String id, String event, String data) {
 

@@ -1,17 +1,18 @@
 // Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors.
 package dev.tachyonmcp.kotlin.server.json
 
-import dev.tachyonmcp.server.json.JsonDocument
-import dev.tachyonmcp.server.json.JsonSchema
-import dev.tachyonmcp.server.json.spi.JsonDocumentFactory
-import dev.tachyonmcp.server.json.spi.JsonSchemaFactory
+import dev.tachyonmcp.json.JsonDocument
+import dev.tachyonmcp.json.JsonSchema
+import dev.tachyonmcp.json.spi.JsonDocumentFactory
+import dev.tachyonmcp.json.spi.JsonSchemaFactory
 import kotlinx.serialization.json.JsonElement
 import java.util.Optional
 
 /**
- * kotlinx.serialization [JsonElement]-backed [JsonDocumentFactory] and [JsonSchemaFactory]: wraps
+ * kotlinx.serialization [JsonElement]-backed
+ * [dev.tachyonmcp.json.spi.JsonDocumentFactory] and [JsonSchemaFactory]: wraps
  * an already-parsed tree without re-serializing it, retaining the element for
- * [JsonDocument.unwrap] instead of round-tripping through a JSON string.
+ * [dev.tachyonmcp.json.JsonDocument.unwrap] instead of round-tripping through a JSON string.
  */
 internal class KotlinxJsonElementFactory :
     JsonDocumentFactory<JsonElement>,

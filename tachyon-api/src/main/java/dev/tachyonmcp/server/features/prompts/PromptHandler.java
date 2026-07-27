@@ -19,12 +19,21 @@ public interface PromptHandler {
 
     /**
      * Handles a prompt request and returns a result (messages or input-required).
+     *
+     * @param ctx     the interaction context
+     * @param request the prompt request
+     * @return the prompt result containing messages or input-required
+     * @throws Exception if prompt handling fails
      */
     PromptResult handle(InteractionContext ctx, PromptRequest request) throws Exception;
 
     /**
      * Handles a prompt request asynchronously. Default delegates to {@link #handle}.
      * Override to integrate async services.
+     *
+     * @param ctx     the interaction context
+     * @param request the prompt request
+     * @return a future that completes with the prompt result
      */
     default CompletionStage<? extends PromptResult> handleAsync(InteractionContext ctx, PromptRequest request) {
         return HandlerFutures.completedOrFailed(() -> handle(ctx, request));

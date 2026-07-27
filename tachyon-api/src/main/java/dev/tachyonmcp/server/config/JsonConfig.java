@@ -1,11 +1,11 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.server.config;
 
-import dev.tachyonmcp.server.json.JsonSchemaValidator;
-import dev.tachyonmcp.server.json.PayloadDeserializer;
-import dev.tachyonmcp.server.json.PayloadSerde;
-import dev.tachyonmcp.server.json.PayloadSerializer;
-import dev.tachyonmcp.server.json.spi.JsonSchemaFactory;
+import dev.tachyonmcp.json.JsonSchemaValidator;
+import dev.tachyonmcp.json.PayloadDeserializer;
+import dev.tachyonmcp.json.PayloadSerde;
+import dev.tachyonmcp.json.PayloadSerializer;
+import dev.tachyonmcp.json.spi.JsonSchemaFactory;
 import org.jspecify.annotations.Nullable;
 
 /**

@@ -31,26 +31,51 @@ public interface InteractionContext {
         SHUTDOWN
     }
 
-    /** Returns the protocol version negotiated during initialisation. */
+    /**
+     * Returns the protocol version negotiated during initialisation.
+     *
+     * @return the negotiated protocol version
+     */
     String protocolVersion();
 
-    /** Returns the current lifecycle phase, or {@code null} before initialisation. */
+    /**
+     * Returns the current lifecycle phase, or {@code null} before initialisation.
+     *
+     * @return the lifecycle phase, or {@code null}
+     */
     @Nullable
     Lifecycle lifecycle();
 
-    /** Returns the session identifier, or {@code null} in stateless mode. */
+    /**
+     * Returns the session identifier, or {@code null} in stateless mode.
+     *
+     * @return the session ID, or {@code null}
+     */
     @Nullable
     String sessionId();
 
-    /** Returns {@code true} if the given extension is active for this interaction. */
+    /**
+     * Returns {@code true} if the given extension is active for this interaction.
+     *
+     * @param extensionId the extension identifier
+     * @return {@code true} if the extension is active
+     */
     boolean isExtensionEnabled(String extensionId);
 
-    /** Returns the notification sender bound to this interaction. */
+    /**
+     * Returns the notification sender bound to this interaction.
+     *
+     * @return the notification sender
+     */
     ContextNotifications notifications();
 
     /**
      * Sends a request to the client and returns a future that completes with the raw JSON response.
      * Used for sampling/elicitation roundtrips.
+     *
+     * @param method the request method name
+     * @param params the request parameters
+     * @return a future that completes with the raw JSON response
      */
     CompletableFuture<String> sendRequest(String method, Object params);
 
@@ -60,12 +85,20 @@ public interface InteractionContext {
      * <p>Scoped to the underlying channel/session, not the current request — a value set on one
      * request is visible to later requests on the same connection. Backed by a concurrent map:
      * safe to call from multiple handler threads without external synchronization.
+     *
+     * @param <T> the type of value
+     * @param key the attribute key
+     * @return the value, or empty if not set
      */
     <T> Optional<T> get(AttributeKey<T> key);
 
     /**
      * Stores {@code value} under {@code key}, visible to later {@link #get(AttributeKey)} calls —
      * see {@link #get(AttributeKey)} for scope and thread-safety.
+     *
+     * @param <T>   the type of value
+     * @param key   the attribute key
+     * @param value the value to store
      */
     <T> void set(AttributeKey<T> key, T value);
 }

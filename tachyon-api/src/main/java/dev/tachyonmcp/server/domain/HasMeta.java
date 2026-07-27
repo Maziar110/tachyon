@@ -6,7 +6,11 @@ import org.jspecify.annotations.Nullable;
 
 /** Marks types that carry optional metadata ({@code _meta}) for protocol extensions. */
 public interface HasMeta {
-    /** Optional metadata map for protocol extensions. */
+    /**
+     * Returns the optional metadata map for protocol extensions.
+     *
+     * @return the metadata map, or {@code null} if none
+     */
     @Nullable
     Map<String, Object> meta();
 }

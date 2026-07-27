@@ -32,6 +32,10 @@ public interface ToolHandler extends ServerFeature<ToolDescriptor> {
     /**
      * Executes the tool asynchronously with the full request — the single method the dispatcher
      * invokes. Override in {@link AbstractToolHandler} or implement directly.
+     *
+     * @param context the interaction context
+     * @param request the tool invocation request
+     * @return a completion stage yielding the tool result
      */
     CompletionStage<? extends ToolResult> handleAsync(InteractionContext context, ToolRequest request);
 
@@ -59,6 +63,11 @@ public interface ToolHandler extends ServerFeature<ToolDescriptor> {
 
     /**
      * Creates a simple sync ToolHandler from a name, description, and function.
+     *
+     * @param name        the tool name
+     * @param description the tool description, or {@code null}
+     * @param fn          the tool function
+     * @return a new handler
      */
     static ToolHandler of(String name, @Nullable String description, ToolFn fn) {
         return of(builder -> builder.name(name).description(description), fn);
@@ -66,6 +75,10 @@ public interface ToolHandler extends ServerFeature<ToolDescriptor> {
 
     /**
      * Creates a simple sync ToolHandler from a name and function.
+     *
+     * @param name the tool name
+     * @param fn   the tool function
+     * @return a new handler
      */
     static ToolHandler of(String name, ToolFn fn) {
         return of(builder -> builder.name(name), fn);
@@ -93,6 +106,11 @@ public interface ToolHandler extends ServerFeature<ToolDescriptor> {
 
     /**
      * Creates a simple async ToolHandler from a name, description, and function.
+     *
+     * @param name        the tool name
+     * @param description the tool description, or {@code null}
+     * @param fn          the async tool function
+     * @return a new handler
      */
     static ToolHandler ofAsync(String name, @Nullable String description, AsyncToolFn fn) {
         return ofAsync(builder -> builder.name(name).description(description), fn);
@@ -100,6 +118,10 @@ public interface ToolHandler extends ServerFeature<ToolDescriptor> {
 
     /**
      * Creates a simple async ToolHandler from a name and function.
+     *
+     * @param name the tool name
+     * @param fn   the async tool function
+     * @return a new handler
      */
     static ToolHandler ofAsync(String name, AsyncToolFn fn) {
         return ofAsync(builder -> builder.name(name), fn);

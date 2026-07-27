@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.protocol.mcp.v2026_07_28.codecs;
 
+import dev.tachyonmcp.json.JsonSchema;
 import dev.tachyonmcp.protocol.mcp.v2026_07_28.McpProtocol;
 import dev.tachyonmcp.protocol.mcp.v2026_07_28.models.BlobResourceContents;
 import dev.tachyonmcp.protocol.mcp.v2026_07_28.models.DiscoverResult;
@@ -24,7 +25,6 @@ import dev.tachyonmcp.server.features.prompts.PromptDescriptor;
 import dev.tachyonmcp.server.features.resources.ResourceDescriptor;
 import dev.tachyonmcp.server.features.resources.ResourceTemplateDescriptor;
 import dev.tachyonmcp.server.features.tools.ToolDescriptor;
-import dev.tachyonmcp.server.json.JsonSchema;
 import dev.tachyonmcp.server.json.JsonUtils;
 import dev.tachyonmcp.transport.jsonrpc.JsonRpcError;
 import java.io.ByteArrayOutputStream;

@@ -5,11 +5,12 @@ import dev.tachyonmcp.kotlin.server.config.TemplateScope
 import dev.tachyonmcp.kotlin.server.features.CoroutineRuntime
 import dev.tachyonmcp.server.domain.ResourceContents
 import dev.tachyonmcp.server.features.resources.AsyncResourceHandler
+import dev.tachyonmcp.server.features.resources.ResourceTemplateDescriptor
 import kotlinx.coroutines.CoroutineName
 
 @JvmSynthetic
 internal fun templateHandler(
-    descriptor: dev.tachyonmcp.server.features.resources.ResourceTemplateDescriptor,
+    descriptor: ResourceTemplateDescriptor,
     runtime: CoroutineRuntime,
     block: suspend TemplateScope.() -> ResourceContents,
 ): AsyncResourceHandler = templateHandler(descriptor.name(), descriptor.mimeType(), runtime, block)

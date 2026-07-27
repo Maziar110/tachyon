@@ -20,8 +20,13 @@ public final class ChangeSupport {
 
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
 
+    /** Creates a new change support with an empty listener list. */
+    public ChangeSupport() {}
+
     /**
      * Registers a callback invoked when the registry contents change.
+     *
+     * @param callback the callback to invoke on change
      */
     public void onChange(Runnable callback) {
         listeners.add(callback);

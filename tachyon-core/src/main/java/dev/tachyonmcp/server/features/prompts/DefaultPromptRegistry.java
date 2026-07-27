@@ -2,6 +2,7 @@
 package dev.tachyonmcp.server.features.prompts;
 
 import dev.tachyonmcp.annotations.InternalApi;
+import dev.tachyonmcp.json.JsonSchemaValidator;
 import dev.tachyonmcp.protocol.mcp.v2025_11_25.codecs.ProtocolCodecUtil;
 import dev.tachyonmcp.protocol.mcp.v2025_11_25.models.GetPromptRequestParams;
 import dev.tachyonmcp.server.RpcMethodHandler;
@@ -14,7 +15,6 @@ import dev.tachyonmcp.server.features.AbstractRegistry;
 import dev.tachyonmcp.server.features.HandlerFutures;
 import dev.tachyonmcp.server.features.ListRequests;
 import dev.tachyonmcp.server.json.JsonSchemaUtils;
-import dev.tachyonmcp.server.json.JsonSchemaValidator;
 import dev.tachyonmcp.server.json.JsonUtils;
 import dev.tachyonmcp.server.session.DispatchContext;
 import dev.tachyonmcp.transport.jsonrpc.JsonRpcCodec;

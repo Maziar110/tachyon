@@ -3,9 +3,9 @@
 
 package dev.tachyonmcp.kotlin.server.domain
 
+import dev.tachyonmcp.json.JsonArray
+import dev.tachyonmcp.json.JsonObject
 import dev.tachyonmcp.server.domain.Args
-import dev.tachyonmcp.server.json.JsonArray
-import dev.tachyonmcp.server.json.JsonObject
 import java.math.BigDecimal
 
 /** Returns the [key] argument as a [String], or `null` when it is missing or JSON null. */

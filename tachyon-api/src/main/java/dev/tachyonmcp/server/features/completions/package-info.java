@@ -3,7 +3,7 @@
  */
 
 /**
- * Resource feature types and handler interfaces.
+ * Completion feature types and handler interfaces for argument autocomplete.
  */
 @NullMarked
 package dev.tachyonmcp.server.features.completions;

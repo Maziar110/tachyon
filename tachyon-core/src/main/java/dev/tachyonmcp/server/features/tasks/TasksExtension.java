@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.server.features.tasks;
 
+import dev.tachyonmcp.json.JsonSchema;
 import dev.tachyonmcp.runtime.InteractionContext;
 import dev.tachyonmcp.server.OutboundSseStreamMessageRouter;
 import dev.tachyonmcp.server.domain.TextResourceContents;
@@ -11,7 +12,6 @@ import dev.tachyonmcp.server.features.tools.ToolDescriptor;
 import dev.tachyonmcp.server.features.tools.ToolRequest;
 import dev.tachyonmcp.server.features.tools.ToolResult;
 import dev.tachyonmcp.server.internal.ServerEngine;
-import dev.tachyonmcp.server.json.JsonSchema;
 import java.util.HashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;

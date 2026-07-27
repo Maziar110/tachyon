@@ -4,6 +4,7 @@ package dev.tachyonmcp.transport.netty;
 import static dev.tachyonmcp.test.TestUtils.newEngine;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.tachyonmcp.json.JsonSchema;
 import dev.tachyonmcp.runtime.InteractionContext;
 import dev.tachyonmcp.server.McpDispatcher;
 import dev.tachyonmcp.server.features.tools.ToolDescriptor;
@@ -11,7 +12,6 @@ import dev.tachyonmcp.server.features.tools.ToolHandler;
 import dev.tachyonmcp.server.features.tools.ToolRequest;
 import dev.tachyonmcp.server.features.tools.ToolResult;
 import dev.tachyonmcp.server.internal.ServerEngine;
-import dev.tachyonmcp.server.json.JsonSchema;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;

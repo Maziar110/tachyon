@@ -4,6 +4,7 @@ package dev.tachyonmcp.server.features.prompts;
 import static dev.tachyonmcp.test.TestUtils.newEngine;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.tachyonmcp.json.JsonSchemaValidator;
 import dev.tachyonmcp.protocol.mcp.v2025_11_25.models.GetPromptResult;
 import dev.tachyonmcp.protocol.mcp.v2025_11_25.models.ListPromptsResult;
 import dev.tachyonmcp.server.RpcMethodHandler;
@@ -13,7 +14,6 @@ import dev.tachyonmcp.server.domain.PromptArgument;
 import dev.tachyonmcp.server.domain.PromptMessage;
 import dev.tachyonmcp.server.domain.ServerError;
 import dev.tachyonmcp.server.internal.ServerEngine;
-import dev.tachyonmcp.server.json.JsonSchemaValidator;
 import dev.tachyonmcp.server.session.DefaultDispatchContext;
 import java.util.HashMap;
 import java.util.List;

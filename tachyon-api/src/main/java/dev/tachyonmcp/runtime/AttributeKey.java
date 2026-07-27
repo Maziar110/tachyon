@@ -21,7 +21,13 @@ public final class AttributeKey<T> {
         this.name = name;
     }
 
-    /** Creates a new, distinct key. {@code name} is for debugging only — it does not affect identity. */
+    /**
+     * Creates a new, distinct key.
+     *
+     * @param name debug label for the key (does not affect identity)
+     * @param <T>  the type of value stored under this key
+     * @return a new distinct key instance
+     */
     public static <T> AttributeKey<T> of(String name) {
         return new AttributeKey<>(name);
     }

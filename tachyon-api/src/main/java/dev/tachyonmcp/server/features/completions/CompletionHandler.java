@@ -19,12 +19,21 @@ public interface CompletionHandler {
 
     /**
      * Returns completion candidates for the given argument.
+     *
+     * @param ctx     the interaction context
+     * @param request the completion request
+     * @return the completion result with candidate values
+     * @throws Exception if completion handling fails
      */
     CompletionResult handle(InteractionContext ctx, CompletionRequest request) throws Exception;
 
     /**
      * Handles a completion request asynchronously. Default delegates to {@link #handle}.
      * Override to integrate async services.
+     *
+     * @param ctx     the interaction context
+     * @param request the completion request
+     * @return a future that completes with the completion result
      */
     default CompletionStage<? extends CompletionResult> handleAsync(InteractionContext ctx, CompletionRequest request) {
         return HandlerFutures.completedOrFailed(() -> handle(ctx, request));

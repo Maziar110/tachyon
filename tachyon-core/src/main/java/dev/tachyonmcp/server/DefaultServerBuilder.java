@@ -1,6 +1,10 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.server;
 
+import dev.tachyonmcp.json.JsonSchemaValidator;
+import dev.tachyonmcp.json.PayloadDeserializer;
+import dev.tachyonmcp.json.PayloadSerializer;
+import dev.tachyonmcp.json.spi.JsonSchemaFactory;
 import dev.tachyonmcp.server.config.CapabilitiesConfig;
 import dev.tachyonmcp.server.config.JsonConfig;
 import dev.tachyonmcp.server.config.MonitoringConfig;
@@ -15,11 +19,7 @@ import dev.tachyonmcp.server.features.prompts.Prompts;
 import dev.tachyonmcp.server.features.resources.Resources;
 import dev.tachyonmcp.server.features.tools.Tools;
 import dev.tachyonmcp.server.json.JacksonPayloadSerde;
-import dev.tachyonmcp.server.json.JsonSchemaValidator;
 import dev.tachyonmcp.server.json.NetworkntJsonSchemaValidator;
-import dev.tachyonmcp.server.json.PayloadDeserializer;
-import dev.tachyonmcp.server.json.PayloadSerializer;
-import dev.tachyonmcp.server.json.spi.JsonSchemaFactory;
 import dev.tachyonmcp.server.session.InMemorySessionEventStore;
 import dev.tachyonmcp.server.session.InMemorySessionStore;
 import io.netty.channel.ChannelPipeline;

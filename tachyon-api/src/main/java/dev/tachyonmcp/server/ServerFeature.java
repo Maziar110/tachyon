@@ -10,6 +10,11 @@ import dev.tachyonmcp.server.domain.HasMeta;
  */
 public interface ServerFeature<D extends ServerFeature.Descriptor> {
 
+    /**
+     * Returns the metadata descriptor for this feature.
+     *
+     * @return the descriptor
+     */
     D descriptor();
 
     interface Descriptor {

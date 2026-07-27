@@ -123,6 +123,9 @@ public class McpDispatcher {
          * not a JSON-RPC error envelope. Used for conditions the MCP Streamable HTTP spec ties to a
          * specific HTTP status rather than a JSON-RPC error code — e.g. a missing {@code MCP-Session-Id}
          * header (400) or an unknown/expired session (404).
+         *
+         * @param code    the HTTP status code
+         * @param message the HTTP status message
          */
         record Status(int code, String message) implements DispatchResult {}
     }

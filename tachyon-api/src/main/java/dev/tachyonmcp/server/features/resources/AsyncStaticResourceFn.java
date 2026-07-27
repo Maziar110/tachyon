@@ -15,5 +15,12 @@ import java.util.concurrent.CompletionStage;
 @FunctionalInterface
 public interface AsyncStaticResourceFn {
 
+    /**
+     * Reads and returns the resource contents for the given URI.
+     *
+     * @param context the interaction context
+     * @param uri     the resource URI to read
+     * @return a future that completes with the resource contents
+     */
     CompletionStage<? extends ResourceContents> handle(InteractionContext context, String uri);
 }

@@ -10,8 +10,12 @@ Tools are the primary way clients invoke server-side logic. Tachyon validates in
 import dev.tachyonmcp.server.features.tools.ToolHandler;
 import dev.tachyonmcp.server.features.tools.ToolResult;
 
-.withTools(tools -> tools.register(ToolHandler.of("hello", "Say hello",
-    (ctx, request) -> ToolResult.text("Hello!"))))
+.withTools(tools ->tools.
+
+register(ToolHandler.of("hello", "Say hello",
+        (ctx, request) ->ToolResult.
+
+text("Hello!"))))
 ```
 
 Need an input schema? Configure the descriptor with the builder overload. `.inputSchema(...)` /
@@ -45,15 +49,15 @@ import dev.tachyonmcp.runtime.InteractionContext;
 
 class WeatherTool extends AbstractToolHandler {
     private static final String SCHEMA = """
-        {"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}
-        """;
+            {"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}
+            """;
 
     WeatherTool() {
         super(ToolDescriptor.builder()
-            .name("get_weather")
-            .description("Get current weather for a city")
-            .inputSchema(SCHEMA)
-            .build());
+                .name("get_weather")
+                .description("Get current weather for a city")
+                .inputSchema(SCHEMA)
+                .build());
     }
 
     @Override
@@ -76,9 +80,19 @@ lambda via `ToolHandler.ofAsync`, or override `handleAsync(ctx, request)` on
 ```java
 import dev.tachyonmcp.server.features.tools.ToolHandler;
 
-.withTools(tools -> tools.register(ToolHandler.ofAsync("get_weather_async",
-    (ctx, request) -> fetchWeather(request.arguments().stringValue("city"))
-        .thenApply(w -> ToolResult.text(w.summary())))))
+.withTools(tools ->tools.
+
+register(ToolHandler.ofAsync("get_weather_async",
+    (ctx, request) ->
+
+fetchWeather(request.arguments().
+
+stringValue("city"))
+        .
+
+thenApply(w ->ToolResult.
+
+text(w.summary())))))
 ```
 
 ### Progress token / full request

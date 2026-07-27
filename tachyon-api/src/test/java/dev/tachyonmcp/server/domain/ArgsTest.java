@@ -4,9 +4,9 @@ package dev.tachyonmcp.server.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import dev.tachyonmcp.server.json.JsonArray;
-import dev.tachyonmcp.server.json.JsonObject;
-import dev.tachyonmcp.server.json.PayloadDeserializer;
+import dev.tachyonmcp.json.JsonArray;
+import dev.tachyonmcp.json.JsonObject;
+import dev.tachyonmcp.json.PayloadDeserializer;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.util.HashMap;

@@ -26,6 +26,11 @@ public final class HandlerFutures {
     /**
      * Joins a CompletionStage via blocking {@code .get()}, restoring interrupt and unwrapping
      * ExecutionException. For use on virtual threads where blocking is expected.
+     *
+     * @param <T>   the result type
+     * @param stage the stage to join
+     * @return the result of the stage
+     * @throws Exception if the stage completed exceptionally
      */
     public static <T> T joinInterruptibly(CompletionStage<T> stage) throws Exception {
         try {
@@ -48,6 +53,9 @@ public final class HandlerFutures {
     /**
      * Unwraps a single level of {@link CompletionException}, returning the original cause when
      * present. Mirrors the unwrap a {@code CompletionStage} callback receives after an async hop.
+     *
+     * @param throwable the throwable to unwrap
+     * @return the original cause, or {@code throwable} itself if not a {@code CompletionException}
      */
     public static Throwable unwrap(Throwable throwable) {
         return throwable instanceof CompletionException ce && ce.getCause() != null ? ce.getCause() : throwable;
@@ -59,6 +67,13 @@ public final class HandlerFutures {
      * ones) to avoid an unconditional executor hop; otherwise schedules {@code fn} on
      * {@code executor} so a handler completing from a foreign thread doesn't leak that thread
      * into response mapping.
+     *
+     * @param <T>      the input result type
+     * @param <R>      the output result type
+     * @param stage    the stage whose outcome to map
+     * @param executor the executor for async completion
+     * @param fn       the mapping function
+     * @return a new stage with the mapped result
      */
     public static <T, R> CompletionStage<R> completeOn(
             CompletionStage<T> stage, Executor executor, BiFunction<? super T, Throwable, ? extends R> fn) {
@@ -71,6 +86,10 @@ public final class HandlerFutures {
      * success, a failed one carrying the thrown exception otherwise. Shared by the sync-handler
      * interfaces' default {@code handleAsync} (e.g. {@code ResourceHandler}, {@code PromptHandler},
      * {@code CompletionHandler}).
+     *
+     * @param <R>     the result type
+     * @param handler the synchronous handler body
+     * @return a completed or failed stage
      */
     public static <R> CompletionStage<R> completedOrFailed(Callable<? extends R> handler) {
         try {
@@ -85,6 +104,13 @@ public final class HandlerFutures {
      * maps the outcome via {@link #completeOn}. Shared registry-dispatch skeleton: obtain the
      * handler's stage safely, then compose the result without blocking. The mapper receives the
      * failure cause already {@link #unwrap unwrapped} (or {@code null} on success).
+     *
+     * @param <R>              the handler result type
+     * @param nullStageMessage message for the NPE if invocation returns null
+     * @param invocation       the handler invocation
+     * @param executor         the executor for async completion
+     * @param resultMapper     maps result or failure to the dispatch outcome
+     * @return a stage with the mapped result
      */
     public static <R> CompletionStage<Object> invokeAndMap(
             String nullStageMessage,

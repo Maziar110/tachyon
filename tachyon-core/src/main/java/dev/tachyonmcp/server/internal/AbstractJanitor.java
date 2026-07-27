@@ -25,11 +25,20 @@ public abstract class AbstractJanitor implements AutoCloseable {
     private final AtomicBoolean started = new AtomicBoolean();
     private volatile @Nullable ScheduledExecutorService executor;
 
+    /**
+     * Creates a janitor with the given thread name.
+     *
+     * @param threadName the daemon thread name
+     */
     protected AbstractJanitor(String threadName) {
         this.threadName = threadName;
     }
 
-    /** Starts the periodic sweep at the given interval. Idempotent — later calls no-op. */
+    /**
+     * Starts the periodic sweep at the given interval. Idempotent — later calls no-op.
+     *
+     * @param interval the sweep interval
+     */
     public final void start(Duration interval) {
         if (!started.compareAndSet(false, true)) {
             return;

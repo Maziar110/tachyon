@@ -35,10 +35,13 @@ import dev.tachyonmcp.server.domain.Task;
 import dev.tachyonmcp.server.domain.TaskResult;
 import dev.tachyonmcp.server.domain.TextContent;
 import dev.tachyonmcp.server.features.tasks.TaskOptions;
+
 import java.util.List;
 
 TachyonServer server = TachyonServer.builder().port(8080).build();
-server.start();
+server.
+
+start();
 
 // Create — server generates the ID
 Task task = server.tasks().create();
@@ -48,8 +51,12 @@ Task ownedTask = server.tasks().create(
         TaskOptions.builder().id("my-runner-task-42").build());
 
 // Update state via the returned Task handle
-ownedTask.updateMessage("Running step 1...");
-ownedTask.complete(TaskResult.completed(List.of(TextContent.of("done")), null, null));
+ownedTask.
+
+updateMessage("Running step 1...");
+ownedTask.
+
+complete(TaskResult.completed(List.of(TextContent.of("done")),null,null));
 ```
 
 Supply `TaskOptions.builder().id(...)` to map a task onto an ID from your own external task
@@ -72,10 +79,10 @@ by adding a `task` field to `tools/call`:
 import dev.tachyonmcp.server.features.tasks.TaskSupport;
 
 var descriptor = ToolDescriptor.builder()
-    .name("import-data")
-    .description("Long-running import")
-    .taskSupport(TaskSupport.OPTIONAL)  // or REQUIRED; default FORBIDDEN
-    .build();
+        .name("import-data")
+        .description("Long-running import")
+        .taskSupport(TaskSupport.OPTIONAL)  // or REQUIRED; default FORBIDDEN
+        .build();
 ```
 
 ```json

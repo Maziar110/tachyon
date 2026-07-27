@@ -13,6 +13,9 @@ import java.util.concurrent.CompletionStage;
  */
 public abstract class AbstractAsyncMethodHandler implements RpcMethodHandler {
 
+    /** Default constructor for subclasses. */
+    protected AbstractAsyncMethodHandler() {}
+
     @Override
     public final Object handle(DispatchContext context, Object params) throws Exception {
         return HandlerFutures.joinInterruptibly(handleAsync(context, params));

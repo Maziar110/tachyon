@@ -3,13 +3,12 @@
 package dev.tachyonmcp.skill
 
 import dev.tachyonmcp.server.features.resources.ResourceDescriptor
+import dev.tachyonmcp.server.features.resources.ResourceHandler
+import dev.tachyonmcp.server.features.resources.ResourceTemplateDescriptor
 import dev.tachyonmcp.kotlin.server.domain.Annotations
 import dev.tachyonmcp.kotlin.server.domain.Icon
 import dev.tachyonmcp.kotlin.server.domain.TextResourceContents
 import dev.tachyonmcp.kotlin.server.features.resources.ResourceDescriptor
-import dev.tachyonmcp.server.features.resources.ResourceHandler
-import dev.tachyonmcp.server.features.resources.ResourceTemplateDescriptor
-import dev.tachyonmcp.kotlin.server.features.resources.ResourceTemplateDescriptor
 import dev.tachyonmcp.kotlin.server.features.resources.resourceDescriptor
 
 /** Static resource — plain factory. */

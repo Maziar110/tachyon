@@ -1,6 +1,10 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.server;
 
+import dev.tachyonmcp.json.JsonSchemaValidator;
+import dev.tachyonmcp.json.PayloadDeserializer;
+import dev.tachyonmcp.json.PayloadSerializer;
+import dev.tachyonmcp.json.spi.JsonSchemaFactory;
 import dev.tachyonmcp.protocol.Protocol;
 import dev.tachyonmcp.protocol.ProtocolResponseMapper;
 import dev.tachyonmcp.protocol.Protocols;
@@ -33,11 +37,7 @@ import dev.tachyonmcp.server.handlers.PingHandler;
 import dev.tachyonmcp.server.internal.NotificationLogSupport;
 import dev.tachyonmcp.server.internal.ServerEngine;
 import dev.tachyonmcp.server.json.JacksonPayloadSerde;
-import dev.tachyonmcp.server.json.JsonSchemaValidator;
 import dev.tachyonmcp.server.json.NetworkntJsonSchemaValidator;
-import dev.tachyonmcp.server.json.PayloadDeserializer;
-import dev.tachyonmcp.server.json.PayloadSerializer;
-import dev.tachyonmcp.server.json.spi.JsonSchemaFactory;
 import dev.tachyonmcp.server.session.SessionEvent;
 import dev.tachyonmcp.server.session.SessionEventStore;
 import dev.tachyonmcp.server.session.SessionIdGenerator;

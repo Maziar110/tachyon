@@ -10,10 +10,14 @@ Server-computed content for a fixed URI:
 import dev.tachyonmcp.server.domain.TextResourceContents;
 import dev.tachyonmcp.server.features.resources.ResourceDescriptor;
 
-.withResources(resources -> resources.register(
-    ResourceDescriptor.of("config", "app://config", "Server config", "application/json"),
-    (ctx, request) ->
-        TextResourceContents.of(request.uri(), """{"env":"prod"}""", "application/json")))
+.withResources(resources ->resources.
+
+register(
+        ResourceDescriptor.of("config", "app://config","Server config","application/json"),
+    (ctx,request)->
+        TextResourceContents.
+
+of(request.uri(), """{"env":"prod"}""","application/json")))
 ```
 
 ## URI template
@@ -25,16 +29,30 @@ import dev.tachyonmcp.server.features.resources.ResourceTemplateDescriptor;
 import dev.tachyonmcp.server.domain.UriTemplateValue;
 
 server.resources()
-    .registerTemplate(
+    .
+
+registerTemplate(
         ResourceTemplateDescriptor.builder()
-            .name("user-profile")
-            .uriTemplate("app://users/{id}")
-            .description("User profile by ID")
-            .mimeType("application/json")
-            .build(),
-        (ctx, request) -> {
-            String id = request.params().get("id").scalarValue();
-            return TextResourceContents.of(request.uri(), loadUser(id), "application/json");
+            .
+
+name("user-profile")
+            .
+
+uriTemplate("app://users/{id}")
+            .
+
+description("User profile by ID")
+            .
+
+mimeType("application/json")
+            .
+
+build(),
+        (ctx,request)->{
+String id = request.params().get("id").scalarValue();
+            return TextResourceContents.
+
+of(request.uri(),loadUser(id),"application/json");
         });
 ```
 
@@ -52,17 +70,22 @@ non-blocking services, implement `AsyncResourceHandler` and return a `Completion
 
 ```java
 import dev.tachyonmcp.server.features.resources.AsyncResourceHandler;
+
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse.BodyHandlers;
 
 AsyncResourceHandler handler = (ctx, request) ->
-    httpClient.sendAsync(
-            HttpRequest.newBuilder(URI.create(request.uri())).GET().build(),
-            BodyHandlers.ofString())
-        .thenApply(rsp -> TextResourceContents.of(request.uri(), rsp.body(), "application/json"));
+        httpClient.sendAsync(
+                        HttpRequest.newBuilder(URI.create(request.uri())).GET().build(),
+                        BodyHandlers.ofString())
+                .thenApply(rsp -> TextResourceContents.of(request.uri(), rsp.body(), "application/json"));
 
-server.resources().registerAsync(descriptor, handler);
+server.
+
+resources().
+
+registerAsync(descriptor, handler);
 ```
 
 Prompts follow the same pattern with `AsyncPromptHandler`. In Kotlin, resource and prompt
@@ -75,7 +98,9 @@ Return binary content with `BlobResourceContents`:
 ```java
 import dev.tachyonmcp.server.domain.BlobResourceContents;
 
-(ctx, request) -> BlobResourceContents.of(request.uri(), base64Image, "image/png")
+(ctx,request)->BlobResourceContents.
+
+of(request.uri(),base64Image, "image/png")
 ```
 
 ## Subscribe to changes

@@ -9,6 +9,7 @@ import dev.tachyonmcp.server.domain.BlobResourceContents
 import dev.tachyonmcp.server.domain.Icon
 import dev.tachyonmcp.server.domain.ImageContent
 import dev.tachyonmcp.server.domain.PromptArgument
+import dev.tachyonmcp.server.domain.Role
 import dev.tachyonmcp.server.domain.ToolAnnotations
 import tools.jackson.databind.JsonNode
 
@@ -18,7 +19,7 @@ public class AnnotationsBuilder
     @PublishedApi
     internal constructor() {
         /** Intended roles, or `null` when unrestricted. */
-        public var audience: List<dev.tachyonmcp.server.domain.Role>? = null
+        public var audience: List<Role>? = null
 
         /** Ordering hint, or `null` for the default. */
         public var priority: Double? = null
@@ -132,7 +133,7 @@ public class ImageContentBuilder
         public var mimeType: String? = null
 
         /** Optional presentation hints. */
-        public var annotations: dev.tachyonmcp.server.domain.Annotations? = null
+        public var annotations: Annotations? = null
 
         /** Optional content metadata. */
         public var meta: Map<String, JsonNode>? = null
@@ -159,7 +160,7 @@ public class AudioContentBuilder
         public var mimeType: String? = null
 
         /** Optional presentation hints. */
-        public var annotations: dev.tachyonmcp.server.domain.Annotations? = null
+        public var annotations: Annotations? = null
 
         /** Optional content metadata. */
         public var meta: Map<String, JsonNode>? = null

@@ -3,6 +3,8 @@ package dev.tachyonmcp.server.json;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.tachyonmcp.json.JsonDocument;
+import dev.tachyonmcp.json.JsonSchema;
 import org.junit.jupiter.api.Test;
 
 class NetworkntJsonSchemaValidatorTest {

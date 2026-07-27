@@ -2,6 +2,7 @@
 package dev.tachyonmcp.server.features.tools;
 
 import dev.tachyonmcp.runtime.InteractionContext;
+import dev.tachyonmcp.server.domain.Args;
 
 /**
  * Synchronous tool function. Unlike {@link java.util.function.BiFunction}, {@link #apply} may
@@ -9,7 +10,7 @@ import dev.tachyonmcp.runtime.InteractionContext;
  * exactly as it does for {@code ResourceHandler} and {@code PromptHandler}.
  *
  * <p>Receives the full {@link ToolRequest} — call {@link ToolRequest#arguments()} for parsed
- * {@link dev.tachyonmcp.server.domain.Args}, or read {@link ToolRequest#progressToken()}
+ * {@link Args}, or read {@link ToolRequest#progressToken()}
  * or {@link ToolRequest#task()} directly when needed.
  *
  * @author Konstantin Pavlov

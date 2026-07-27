@@ -11,8 +11,18 @@ import org.jspecify.annotations.Nullable;
  */
 public sealed interface ResourceContents extends HasMeta permits TextResourceContents, BlobResourceContents {
 
+    /**
+     * Returns the resource URI.
+     *
+     * @return the resource identifier
+     */
     String uri();
 
+    /**
+     * Returns the MIME type of the resource content, or {@code null} if unspecified.
+     *
+     * @return the MIME type, or {@code null}
+     */
     @Nullable
     String mimeType();
 }

@@ -1,9 +1,9 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.server.domain;
 
-import dev.tachyonmcp.server.json.JsonArray;
-import dev.tachyonmcp.server.json.JsonObject;
-import dev.tachyonmcp.server.json.PayloadDeserializer;
+import dev.tachyonmcp.json.JsonArray;
+import dev.tachyonmcp.json.JsonObject;
+import dev.tachyonmcp.json.PayloadDeserializer;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.util.Map;
@@ -13,6 +13,9 @@ import java.util.OptionalInt;
 import java.util.OptionalLong;
 import org.jspecify.annotations.Nullable;
 
+/**
+ * Arguments container wrapping a {@link JsonObject} with optional deserialization support.
+ */
 public final class Args implements JsonObject {
 
     private final JsonObject values;
@@ -25,22 +28,52 @@ public final class Args implements JsonObject {
         this.deserializer = deserializer;
     }
 
+    /**
+     * Creates arguments from a map of values.
+     *
+     * @param values the argument values, or {@code null} for empty
+     * @return a new Args instance
+     */
     public static Args of(@Nullable Map<String, ?> values) {
         return new Args(values == null ? JsonObject.empty() : JsonObject.of(values), null);
     }
 
+    /**
+     * Returns a shared empty arguments instance.
+     *
+     * @return empty args
+     */
     public static Args empty() {
         return EMPTY;
     }
 
+    /**
+     * Creates arguments from a map of values with a deserializer.
+     *
+     * @param values      the argument values, or {@code null} for empty
+     * @param deserializer the payload deserializer, or {@code null}
+     * @return a new Args instance
+     */
     public static Args of(@Nullable Map<String, ?> values, @Nullable PayloadDeserializer deserializer) {
         return new Args(values == null ? JsonObject.empty() : JsonObject.of(values), deserializer);
     }
 
+    /**
+     * Creates arguments from a JSON object with a deserializer.
+     *
+     * @param values      the JSON object containing argument values
+     * @param deserializer the payload deserializer, or {@code null}
+     * @return a new Args instance
+     */
     public static Args from(JsonObject values, @Nullable PayloadDeserializer deserializer) {
         return new Args(values, deserializer);
     }
 
+    /**
+     * Returns whether the arguments are empty.
+     *
+     * @return {@code true} if no arguments are present
+     */
     public boolean isEmpty() {
         return values.asMap().isEmpty();
     }

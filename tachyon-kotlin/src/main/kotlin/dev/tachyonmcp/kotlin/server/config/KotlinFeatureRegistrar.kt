@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors.
 package dev.tachyonmcp.kotlin.server.config
 
+import dev.tachyonmcp.json.JsonSchema
 import dev.tachyonmcp.kotlin.server.features.CoroutineRuntime
 import dev.tachyonmcp.kotlin.server.features.completions.promptCompletionHandler
 import dev.tachyonmcp.kotlin.server.features.completions.resourceCompletionHandler
@@ -19,7 +20,6 @@ import dev.tachyonmcp.server.features.resources.ResourceDescriptor
 import dev.tachyonmcp.server.features.resources.ResourceTemplateDescriptor
 import dev.tachyonmcp.server.features.tools.ToolDescriptor
 import dev.tachyonmcp.server.features.tools.ToolResult
-import dev.tachyonmcp.server.json.JsonSchema
 
 internal class KotlinFeatureRegistrar(
     private val delegate: ServerBuilder,

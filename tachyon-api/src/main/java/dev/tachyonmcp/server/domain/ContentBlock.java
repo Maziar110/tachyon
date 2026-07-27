@@ -32,12 +32,20 @@ public sealed interface ContentBlock extends HasMeta
             this.discriminator = discriminator;
         }
 
-        /** Returns the wire-level discriminator string for this content type. */
+        /**
+         * Returns the wire-level discriminator string for this content type.
+         *
+         * @return the protocol discriminator string
+         */
         public String discriminator() {
             return discriminator;
         }
     }
 
-    /** Returns the MCP protocol type discriminator for this content block variant. */
+    /**
+     * Returns the MCP protocol type discriminator for this content block variant.
+     *
+     * @return the content type discriminator
+     */
     Type type();
 }

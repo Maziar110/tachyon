@@ -1,11 +1,11 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.server.features.tools;
 
+import dev.tachyonmcp.json.JsonDocument;
 import dev.tachyonmcp.server.domain.ContentBlock;
 import dev.tachyonmcp.server.domain.InputRequest;
 import dev.tachyonmcp.server.domain.InputRequestBundle;
 import dev.tachyonmcp.server.domain.TextContent;
-import dev.tachyonmcp.server.json.JsonDocument;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;

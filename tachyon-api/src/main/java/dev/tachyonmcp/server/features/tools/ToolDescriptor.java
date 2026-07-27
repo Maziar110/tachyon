@@ -1,11 +1,11 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.server.features.tools;
 
+import dev.tachyonmcp.json.JsonSchema;
 import dev.tachyonmcp.server.ServerFeature;
 import dev.tachyonmcp.server.domain.Icon;
 import dev.tachyonmcp.server.domain.ToolAnnotations;
 import dev.tachyonmcp.server.features.tasks.TaskSupport;
-import dev.tachyonmcp.server.json.JsonSchema;
 import java.util.List;
 import org.immutables.value.Value;
 import org.jspecify.annotations.Nullable;

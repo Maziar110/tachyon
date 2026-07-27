@@ -6,8 +6,10 @@
 
 package dev.tachyonmcp.kotlin.server.domain
 
+import dev.tachyonmcp.server.domain.ContentBlock
 import dev.tachyonmcp.server.domain.PromptArgument
 import dev.tachyonmcp.server.domain.PromptMessage
+import dev.tachyonmcp.server.domain.Role
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
@@ -20,8 +22,8 @@ import kotlin.contracts.contract
  * @author Konstantin Pavlov
  */
 public fun PromptMessage(
-    role: dev.tachyonmcp.server.domain.Role,
-    content: dev.tachyonmcp.server.domain.ContentBlock,
+    role: Role,
+    content: ContentBlock,
 ): PromptMessage =
     PromptMessage
         .of(role, content)

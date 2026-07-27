@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.protocol.mcp.v2025_11_25.codecs;
 
+import dev.tachyonmcp.json.JsonDocument;
 import dev.tachyonmcp.protocol.ProtocolResponseMapper;
 import dev.tachyonmcp.protocol.mcp.v2025_11_25.McpProtocol;
 import dev.tachyonmcp.protocol.mcp.v2025_11_25.models.CallToolResult;
@@ -38,7 +39,6 @@ import dev.tachyonmcp.server.features.tools.ToolResult;
 import dev.tachyonmcp.server.features.tools.ToolResult.InputRequired;
 import dev.tachyonmcp.server.features.tools.ToolResult.Success;
 import dev.tachyonmcp.server.features.tools.ToolResult.WithMeta;
-import dev.tachyonmcp.server.json.JsonDocument;
 import dev.tachyonmcp.server.json.JsonUtils;
 import dev.tachyonmcp.transport.jsonrpc.JsonRpcCodec;
 import dev.tachyonmcp.transport.jsonrpc.JsonRpcError;
@@ -53,6 +53,7 @@ import tools.jackson.core.JsonParser;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.node.ObjectNode;
 
+/** {@link ProtocolResponseMapper} for MCP 2025-11-25. */
 public class McpResponseMapper implements ProtocolResponseMapper {
 
     private static final Object EMPTY = new EmptyResult(null, null);
@@ -61,6 +62,7 @@ public class McpResponseMapper implements ProtocolResponseMapper {
         CodecRegistry.registerOverride(InputRequiredPayload.class, new InputRequiredPayloadCodec());
     }
 
+    /** Default constructor, discovered via {@link java.util.ServiceLoader}. */
     public McpResponseMapper() {}
 
     @Override

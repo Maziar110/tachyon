@@ -7,7 +7,7 @@ import dev.tachyonmcp.server.TachyonServer
 import dev.tachyonmcp.server.features.tools.ToolRequest
 import dev.tachyonmcp.server.features.tools.AbstractToolHandler
 import dev.tachyonmcp.server.features.tools.ToolResult
-import dev.tachyonmcp.server.json.JsonSchema
+import dev.tachyonmcp.json.JsonSchema
 import dev.tachyonmcp.kotlin.server.buildServer
 import dev.tachyonmcp.kotlin.server.config.TachyonServerBuilder
 import dev.tachyonmcp.kotlin.server.config.success
