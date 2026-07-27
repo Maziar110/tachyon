@@ -23,7 +23,9 @@
 
 🛡️ **Stable APIs across spec changes** — domain types (`ToolHandler`, `ResourceHandler`, `PromptHandler`, tasks) sit behind an internal protocol mapper. Spec upgrades change the mapper, not your handlers.
 
-☁️ **Serverless by default** — stateless request handling works out of the box on AWS Lambda and similar. Opt into sessions (`.session(s -> s.enabled(true))`) for SSE resumability, `Last-Event-ID` replay, and TTL cleanup.
+☁️ **Stateless by default** — scale without session affinity on containers and serverless runtimes.
+AWS Lambda needs an adapter that supports a listening HTTP server and long-lived SSE responses.
+Opt into sessions for SSE resumability, `Last-Event-ID` replay, and TTL cleanup.
 
 🚄 **Production transport** — Netty with backpressure, graceful shutdown, DNS rebinding protection, and native transport auto-detection (`io_uring` → `epoll` → `kqueue` → NIO).
 
@@ -74,6 +76,7 @@
 | [Resources](docs/resources.md) | Static URIs, dynamic handlers, URI templates |
 | [Tasks](docs/tasks.md) | Long-running operations, state machine, `TasksExtension` |
 | [Extensions](docs/extensions.md) | Custom protocol extensions, negotiation |
+| [FAQ](docs/faq.md) | Java, frameworks, concurrency, deployment, and compatibility |
 | [Kotlin DSL](docs/kotlin.md) | Coroutine-first DSL, `TachyonServer { }`, scope reference |
 | [Kotlin module](tachyon-kotlin/README.md) | `tachyon-kotlin` module overview |
 
@@ -163,19 +166,6 @@ Handler interfaces (`ToolHandler`, `ResourceHandler`, `PromptHandler`) and descr
 - **HTTP/2** — transport is HTTP/1.1
 - **Rate limiting**
 - **Telemetry**
-
----
-
-## FAQ
-
-### Can I deploy to AWS Lambda?
-Yes. Servers are stateless by default, so each invocation processes one request independently. Enable sessions with `.session(cfg -> cfg.enabled(true))` when you need SSE resumability or replay.
-
-### How do I write a tool?
-See [docs/tools.md](docs/tools.md) — covers lambda and class-based handlers, input schema, and `ToolResult` factories.
-
-### How do I expose a resource?
-See [docs/resources.md](docs/resources.md) — covers static URIs, dynamic handlers, URI templates, and subscriptions.
 
 ## License
 
