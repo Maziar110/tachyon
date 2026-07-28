@@ -1,4 +1,4 @@
-[![Maven Central](https://img.shields.io/maven-central/v/dev.tachyonmcp/tachyon-core)](https://repo1.maven.org/maven2/dev/tachyonmcp/tachyon-core/)
+[![Maven Central](https://img.shields.io/maven-central/v/dev.tachyonmcp/tachyon-core)](https://central.sonatype.com/search?q=dev.tachyonmcp%2Ftachyon-*)
 [![Java 21+](https://img.shields.io/badge/Java-21+-orange.svg?logo=jvm)](http://java.com)
 [![Build](https://github.com/kpavlov/tachyon/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/kpavlov/tachyon/actions/workflows/build.yml)
 [![MCPConformance: 2025-11-25+2026-07-28](https://img.shields.io/badge/MCP%20Conformance-2025.11.25%20+%202026.07.28-grass?logo=modelcontextprotocol)](https://github.com/modelcontextprotocol/conformance)
@@ -38,7 +38,7 @@ Opt into sessions for SSE resumability, `Last-Event-ID` replay, and TTL cleanup.
     <dependency>
         <groupId>dev.tachyonmcp</groupId>
         <artifactId>tachyon-core</artifactId>
-        <version>1.0.0-beta.14</version>
+        <version>1.0.0-beta.15</version>
     </dependency>
     ```
 
