@@ -5,6 +5,9 @@ package com.example.weather
 import com.example.weather.service.WeatherService
 import com.example.weather.spi.CityNotFoundException
 import com.example.weather.spi.WeatherObservation
+import dev.tachyonmcp.api.json.JsonSchema
+import dev.tachyonmcp.api.runtime.ElicitationRequest
+import dev.tachyonmcp.api.runtime.ElicitationResult
 import dev.tachyonmcp.api.runtime.InteractionContext
 import dev.tachyonmcp.api.server.domain.ProgressToken
 import dev.tachyonmcp.api.server.features.tools.ToolDescriptor
@@ -12,14 +15,16 @@ import dev.tachyonmcp.api.server.features.tools.ToolResult
 import dev.tachyonmcp.kotlin.server.config.ToolScope
 import dev.tachyonmcp.kotlin.server.features.tools.ToolDescriptor
 import org.slf4j.LoggerFactory
-import tools.jackson.databind.ObjectMapper
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
 private val log = LoggerFactory.getLogger("com.example.weather.GetWeatherTool")
-private val MAPPER = ObjectMapper()
 private const val ELICITATION_TIMEOUT_SECONDS = 600L
+private val CITY_SCHEMA =
+    JsonSchema.of(
+        """{"type":"object","properties":{"city":{"type":"string","title":"City"}},"required":["city"]}""",
+    )
 
 // language=json
 private const val INPUT_SCHEMA = """
@@ -40,7 +45,7 @@ private const val INPUT_SCHEMA = """
 }
 """
 
-fun getWeatherToolDescriptor(): ToolDescriptor =
+val getWeatherToolDescriptor =
     ToolDescriptor {
         name = "get-weather"
         title = "Current Weather"
@@ -51,25 +56,26 @@ fun getWeatherToolDescriptor(): ToolDescriptor =
 fun ToolScope.getWeather(weatherService: WeatherService): ToolResult {
     val args = request.arguments()
     val city = args.stringValue("city")
-    val units = args.stringOr("units", "celsius") ?: "celsius"
+    val units = args.stringOr("units", "celsius")
     val progressToken = request.progressToken()
 
-    fun render(city: String) =
-        ToolResult.text(format(fetchWithProgress(ctx, progressToken, weatherService, city), units))
+    fun attempt(city: String): ToolResult =
+        try {
+            ToolResult.text(format(fetchWithProgress(ctx, progressToken, weatherService, city), units))
+        } catch (e: Exception) {
+            if (e is CityNotFoundException) throw e
+            internalError(e)
+        }
 
     return try {
-        render(city)
+        attempt(city)
     } catch (_: CityNotFoundException) {
         val elicitedCity = elicitCity(ctx, city) ?: return ToolResult.error("City not found")
         try {
-            render(elicitedCity)
+            attempt(elicitedCity)
         } catch (_: CityNotFoundException) {
             ToolResult.error("City not found")
-        } catch (x: Exception) {
-            internalError(x)
         }
-    } catch (e: Exception) {
-        internalError(e)
     }
 }
 
@@ -102,42 +108,20 @@ private fun elicitCity(
     city: String,
 ): String? {
     val future =
-        ctx.sendRequest(
-            "elicitation/create",
-            mapOf(
-                "mode" to "form",
-                "message" to "City '$city' was not found. Enter another city.",
-                "requestedSchema" to
-                    mapOf(
-                        "type" to "object",
-                        "properties" to
-                            mapOf(
-                                "city" to
-                                    mapOf(
-                                        "type" to "string",
-                                        "title" to "City",
-                                    ),
-                            ),
-                        "required" to listOf("city"),
-                    ),
-            ),
+        ctx.client().elicitation().create(
+            ElicitationRequest("City '$city' was not found. Enter another city.", CITY_SCHEMA),
         )
-    val response =
+    val result =
         try {
             future.get(ELICITATION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         } catch (e: InterruptedException) {
-            Thread.currentThread().interrupt()
+            restoreInterruptStatus(e)
             throw e
         } catch (_: TimeoutException) {
             return null
         }
-    val result = MAPPER.readTree(response)
-    if (result.path("action").asString() != "accept") return null
-    return result
-        .path("content")
-        .path("city")
-        .asString()
-        .takeIf(String::isNotBlank)
+    if (result.action() != ElicitationResult.Action.ACCEPT) return null
+    return result.content()?.stringOr("city", "")?.takeIf(String::isNotBlank)
 }
 
 private fun format(

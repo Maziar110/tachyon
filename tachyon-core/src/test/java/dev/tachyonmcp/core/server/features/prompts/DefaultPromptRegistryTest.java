@@ -239,10 +239,24 @@ class DefaultPromptRegistryTest {
     }
 
     @Test
+    void shouldReturnInvalidParamsForBadArgumentsWithoutSchema() throws Exception {
+        registry.register(PromptDescriptor.of("no-schema", "No schema prompt"), List.of(PromptMessage.user("Hi")));
+
+        var result = handlers.get("prompts/get")
+                .handle(
+                        DefaultDispatchContext.stateless(server),
+                        Map.of("name", "no-schema", "arguments", List.of(1, 2, 3)));
+
+        assertThat(result).isInstanceOf(ServerError.class);
+        assertThat(((ServerError) result).kind()).isEqualTo(ServerError.Kind.INVALID_PARAMS);
+    }
+
+    @Test
     void shouldUseDynamicHandlerForMessages() throws Exception {
         registry.register(
                 PromptDescriptor.of("dynamic", "Dynamic prompt"),
-                (ctx, request) -> PromptResult.messages(List.of(PromptMessage.user("args=" + request.arguments()))));
+                (ctx, request) -> PromptResult.messages(
+                        List.of(PromptMessage.user("args=" + request.arguments().json()))));
 
         var result = (GetPromptResult)
                 handlers.get("prompts/get").handle(DefaultDispatchContext.stateless(server), Map.of("name", "dynamic"));

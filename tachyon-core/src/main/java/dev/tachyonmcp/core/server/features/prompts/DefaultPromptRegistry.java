@@ -4,6 +4,7 @@ package dev.tachyonmcp.core.server.features.prompts;
 import dev.tachyonmcp.api.annotations.InternalApi;
 import dev.tachyonmcp.api.json.JsonSchemaValidator;
 import dev.tachyonmcp.api.server.config.Mode;
+import dev.tachyonmcp.api.server.domain.Args;
 import dev.tachyonmcp.api.server.domain.PromptMessage;
 import dev.tachyonmcp.api.server.domain.ServerError;
 import dev.tachyonmcp.api.server.features.HandlerFutures;
@@ -171,20 +172,21 @@ public class DefaultPromptRegistry extends AbstractRegistry<PromptDescriptor, Pr
             if (extId != null && !context.isExtensionEnabled(extId)) {
                 return CompletableFuture.completedFuture(ServerErrors.invalidRequest("Prompt not found"));
             }
+            Map<String, JsonNode> argsMap;
+            try {
+                argsMap = extractArgumentsMap(params);
+            } catch (RuntimeException e) {
+                return CompletableFuture.completedFuture(ServerErrors.invalidParams("Invalid arguments"));
+            }
+
             var inputSchema = entry.descriptor().inputSchema();
             if (inputSchema != null) {
-                Map<String, JsonNode> argsMap;
-                try {
-                    argsMap = extractArgumentsMap(params);
-                } catch (RuntimeException e) {
-                    return CompletableFuture.completedFuture(ServerErrors.invalidParams("Invalid arguments"));
-                }
                 var error = JsonSchemaUtils.validateArguments(validator, inputSchema, argsMap);
                 if (error != null) return CompletableFuture.completedFuture(ServerErrors.invalidParams(error));
             }
 
             var request = new PromptRequest(
-                    extractArguments(params),
+                    argsMap != null ? Args.of(JsonUtils.toObjectMap(argsMap)) : Args.empty(),
                     extractInputResponsesFromParams(params),
                     extractRequestStateFromParams(params));
 
@@ -216,16 +218,6 @@ public class DefaultPromptRegistry extends AbstractRegistry<PromptDescriptor, Pr
                                 context.responseMapper().inputRequiredResult(ir.inputRequests(), ir.requestState());
                         };
                     });
-        }
-
-        private static @Nullable String extractArguments(Object params) {
-            if (params instanceof GetPromptRequestParams p && p.arguments() != null) {
-                return JsonRpcCodec.writeValueAsString(p.arguments());
-            }
-            if (params instanceof Map<?, ?> map && map.get("arguments") instanceof Map<?, ?> args) {
-                return JsonRpcCodec.writeValueAsString(args);
-            }
-            return null;
         }
 
         private static @Nullable Map<String, JsonNode> extractArgumentsMap(Object params) {
