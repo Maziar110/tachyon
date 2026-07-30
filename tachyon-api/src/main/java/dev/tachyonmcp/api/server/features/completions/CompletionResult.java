@@ -1,7 +1,9 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.api.server.features.completions;
 
+import dev.tachyonmcp.api.server.domain.HasMeta;
 import java.util.List;
+import java.util.Map;
 import org.immutables.value.Value;
 import org.jspecify.annotations.Nullable;
 
@@ -15,7 +17,7 @@ import org.jspecify.annotations.Nullable;
         allParameters = true,
         visibility = Value.Style.ImplementationVisibility.PACKAGE,
         typeImmutable = "Default*")
-public interface CompletionResult {
+public interface CompletionResult extends HasMeta {
 
     /**
      * Candidate values ranked by relevance.
@@ -26,13 +28,18 @@ public interface CompletionResult {
      * The total number of matches, if known.
      */
     @Nullable
-    Double total();
+    Long total();
 
     /**
      * Whether additional results exist beyond {@link #values()}.
      */
     @Nullable
     Boolean hasMore();
+
+    /** Optional protocol extension metadata. */
+    @Nullable
+    @Override
+    Map<String, Object> meta();
 
     /**
      * An empty completion result with no candidates, unknown total, and no more results.
@@ -54,7 +61,7 @@ public interface CompletionResult {
     /**
      * Creates a result with candidate values and total/hasMore metadata.
      */
-    static CompletionResult of(List<String> values, @Nullable Double total, @Nullable Boolean hasMore) {
+    static CompletionResult of(List<String> values, @Nullable Long total, @Nullable Boolean hasMore) {
         return DefaultCompletionResult.builder()
                 .values(values)
                 .total(total)
@@ -62,21 +69,61 @@ public interface CompletionResult {
                 .build();
     }
 
+    /** Creates a new builder for {@link CompletionResult}. */
     static Builder builder() {
         return DefaultCompletionResult.builder();
     }
 
+    /** Builder for {@link CompletionResult}. */
     interface Builder {
+
+        /**
+         * Sets the candidate values ranked by relevance.
+         *
+         * @param elements candidate values
+         */
         Builder values(Iterable<String> elements);
 
+        /**
+         * Sets the candidate values ranked by relevance.
+         *
+         * @param values candidate values
+         */
         default Builder values(String... values) {
             return values(List.of(values));
         }
 
-        Builder total(@Nullable Double total);
+        /**
+         * Sets the total number of matches, if known.
+         *
+         * @param total total match count, or {@code null} if unknown
+         */
+        Builder total(@Nullable Long total);
 
+        /**
+         * Sets the total number of matches, if known.
+         *
+         * @param total total match count, or {@code null} if unknown
+         */
+        default Builder total(int total) {
+            return total((long) total);
+        }
+
+        /**
+         * Sets whether additional results exist beyond {@link #values()}.
+         *
+         * @param hasMore {@code true} if more results exist, or {@code null} if unknown
+         */
         Builder hasMore(@Nullable Boolean hasMore);
 
+        /**
+         * Sets optional protocol extension metadata.
+         *
+         * @param entries metadata entries, or {@code null} for none
+         */
+        Builder meta(@Nullable Map<String, ?> entries);
+
+        /** Builds the {@link CompletionResult}. */
         CompletionResult build();
     }
 }

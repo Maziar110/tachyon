@@ -28,7 +28,7 @@ class DefaultCompletionRegistryTest {
     private final HashMap<String, RpcMethodHandler> handlers = new HashMap<>();
 
     public DefaultCompletionRegistryTest() {
-        ((DefaultCompletionRegistry) registry).registerHandlers(handlers);
+        CompletionMethodHandlers.register(handlers, (DefaultCompletionRegistry) registry);
     }
 
     private static final JsonMapper JSON = new JsonMapper();
@@ -87,7 +87,7 @@ class DefaultCompletionRegistryTest {
     void completesPromptArgumentUsingRegisteredHandler() throws Exception {
         completions.registerForPrompt(
                 "code_review",
-                (ctx, request) -> CompletionResult.of(List.of("python", "pytorch", "pyside"), 10.0, true));
+                (ctx, request) -> CompletionResult.of(List.of("python", "pytorch", "pyside"), 10L, true));
 
         var result = complete(
                 handlers,

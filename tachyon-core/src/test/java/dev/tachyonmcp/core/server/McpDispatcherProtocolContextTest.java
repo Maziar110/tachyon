@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.tachyonmcp.api.server.domain.RequestId;
 import dev.tachyonmcp.core.protocol.Protocol;
+import dev.tachyonmcp.core.protocol.ProtocolRequestMapper;
 import dev.tachyonmcp.core.protocol.ProtocolResponseMapper;
 import dev.tachyonmcp.core.protocol.Protocols;
 import dev.tachyonmcp.core.runtime.ChannelContext;
@@ -59,6 +60,11 @@ class McpDispatcherProtocolContextTest {
         }
 
         @Override
+        public ProtocolRequestMapper requestMapper() {
+            return Protocols.list().getFirst().requestMapper();
+        }
+
+        @Override
         public ChannelContext createInteractionContext() {
             contextsCreated.incrementAndGet();
             var ic = new DefaultChannelContext(this);
@@ -105,6 +111,7 @@ class McpDispatcherProtocolContextTest {
             assertThat(handlerContext.get()).isNotNull();
             assertThat(handlerContext.get().protocol()).isSameAs(protocol);
             assertThat(handlerContext.get().session()).isSameAs(session);
+            assertThat(session.protocol()).isSameAs(protocol);
         }
     }
 

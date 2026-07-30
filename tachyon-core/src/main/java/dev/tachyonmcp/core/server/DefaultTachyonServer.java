@@ -29,12 +29,18 @@ import dev.tachyonmcp.core.runtime.Session;
 import dev.tachyonmcp.core.runtime.SessionState;
 import dev.tachyonmcp.core.runtime.SseEvent;
 import dev.tachyonmcp.core.server.config.ServerConfig;
+import dev.tachyonmcp.core.server.features.completions.CompletionMethodHandlers;
 import dev.tachyonmcp.core.server.features.completions.DefaultCompletionRegistry;
 import dev.tachyonmcp.core.server.features.prompts.DefaultPromptRegistry;
+import dev.tachyonmcp.core.server.features.prompts.PromptMethodHandlers;
 import dev.tachyonmcp.core.server.features.resources.DefaultResourceRegistry;
+import dev.tachyonmcp.core.server.features.resources.ResourceMethodHandlers;
 import dev.tachyonmcp.core.server.features.tasks.DefaultTaskRegistry;
+import dev.tachyonmcp.core.server.features.tasks.TaskEntry;
+import dev.tachyonmcp.core.server.features.tasks.TaskMethodHandlers;
 import dev.tachyonmcp.core.server.features.tasks.TaskRegistry;
 import dev.tachyonmcp.core.server.features.tools.DefaultToolRegistry;
+import dev.tachyonmcp.core.server.features.tools.ToolMethodHandlers;
 import dev.tachyonmcp.core.server.handlers.DiscoverHandler;
 import dev.tachyonmcp.core.server.handlers.InitializeHandler;
 import dev.tachyonmcp.core.server.handlers.LoggingHandlers;
@@ -42,6 +48,7 @@ import dev.tachyonmcp.core.server.handlers.PingHandler;
 import dev.tachyonmcp.core.server.internal.NotificationLogSupport;
 import dev.tachyonmcp.core.server.internal.ServerEngine;
 import dev.tachyonmcp.core.server.json.JacksonPayloadSerde;
+import dev.tachyonmcp.core.server.json.JsonUtils;
 import dev.tachyonmcp.core.server.json.NetworkntJsonSchemaValidator;
 import dev.tachyonmcp.core.server.session.DispatchContext;
 import dev.tachyonmcp.core.server.session.SessionEvent;
@@ -89,6 +96,10 @@ final class DefaultTachyonServer implements ServerEngine, ExtensionContext {
     private final DefaultTaskRegistry taskRegistry;
     private final DefaultPromptRegistry promptRegistry;
     private final DefaultCompletionRegistry completionRegistry;
+    private final JsonSchemaValidator inputValidator;
+    private final JsonSchemaValidator outputValidator;
+    private final PayloadSerializer payloadSerializer;
+    private final PayloadDeserializer payloadDeserializer;
     private final Map<String, RpcMethodHandler> methodHandlers = new ConcurrentHashMap<>();
     final Map<String, LoggingLevel> loggingLevels = new ConcurrentHashMap<>();
     final ConcurrentHashMap<RequestId, CompletableFuture<String>> pendingRequests = new ConcurrentHashMap<>();
@@ -258,17 +269,15 @@ final class DefaultTachyonServer implements ServerEngine, ExtensionContext {
                 payloadDeserializer != null ? payloadDeserializer : defaultSerde;
         final JsonSchemaFactory<String> schemaFactory1 =
                 schemaFactory != null ? schemaFactory : discoverSchemaFactory();
+        this.inputValidator = inputValidator1;
+        this.outputValidator = outputValidator1;
+        this.payloadSerializer = payloadSerializer1;
+        this.payloadDeserializer = payloadDeserializer1;
         var caps = config.capabilities();
-        this.toolRegistry = new DefaultToolRegistry(
-                inputValidator1,
-                outputValidator1,
-                payloadSerializer1,
-                payloadDeserializer1,
-                schemaFactory1,
-                caps.tools());
+        this.toolRegistry = new DefaultToolRegistry(schemaFactory1, caps.tools());
         this.resourceRegistry = new DefaultResourceRegistry(this, caps.resources());
         this.taskRegistry = new DefaultTaskRegistry(this, caps.tasks());
-        this.promptRegistry = new DefaultPromptRegistry(inputValidator1, caps.prompts());
+        this.promptRegistry = new DefaultPromptRegistry(caps.prompts());
         this.completionRegistry = new DefaultCompletionRegistry(caps.completions());
         registerDefaults();
         bootstrapExtensions();
@@ -385,15 +394,39 @@ final class DefaultTachyonServer implements ServerEngine, ExtensionContext {
         }
     }
 
+    @Override
+    public void notifyTaskStatus(TaskEntry entry) {
+        var sessionId = entry.sessionId();
+        if (sessionId != null) {
+            getSession(sessionId).ifPresent(session -> notifyTaskStatus(session, entry));
+        } else {
+            for (var session : sessionManager.allSessions()) {
+                if (session.state() == SessionState.ACTIVE) {
+                    notifyTaskStatus(session, entry);
+                }
+            }
+        }
+    }
+
+    private void notifyTaskStatus(Session session, TaskEntry entry) {
+        var protocol = session.protocol();
+        var params =
+                (protocol != null ? protocol.responseMapper() : responseMapper()).taskStatusNotificationParams(entry);
+        var paramsJson = JsonUtils.writeString(params);
+        var notificationJson = JsonRpcCodec.serializeNotificationAsString("notifications/tasks/status", paramsJson);
+        sendSerializedNotification(session, "notifications/tasks/status", paramsJson, notificationJson, null);
+    }
+
     private void registerDefaults() {
         methodHandlers.put("initialize", new InitializeHandler(this, extensions));
         methodHandlers.put("server/discover", new DiscoverHandler(this));
         methodHandlers.put("ping", new PingHandler());
-        toolRegistry.registerHandlers(methodHandlers);
-        resourceRegistry.registerHandlers(methodHandlers);
-        taskRegistry.registerHandlers(methodHandlers);
-        promptRegistry.registerHandlers(methodHandlers);
-        completionRegistry.registerHandlers(methodHandlers);
+        ToolMethodHandlers.register(
+                methodHandlers, toolRegistry, inputValidator, outputValidator, payloadSerializer, payloadDeserializer);
+        ResourceMethodHandlers.register(methodHandlers, resourceRegistry);
+        TaskMethodHandlers.register(methodHandlers, taskRegistry);
+        PromptMethodHandlers.register(methodHandlers, promptRegistry, inputValidator);
+        CompletionMethodHandlers.register(methodHandlers, completionRegistry);
         if (config.capabilities().logging()) {
             LoggingHandlers.register(methodHandlers);
         }
