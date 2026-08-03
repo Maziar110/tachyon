@@ -1,4 +1,6 @@
-// Copyright (c) 2026 Konstantin Pavlov and contributors.
+/*
+ * Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors.
+ */
 
 package com.example.weather.spi
 
@@ -7,7 +9,6 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class WeatherObservation(
-    val city: String,
     val condition: String,
     val temperature: Double,
     val temperatureUnit: TemperatureUnit,

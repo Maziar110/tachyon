@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2026 Konstantin Pavlov and contributors.
+ * Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors.
  */
 
 package com.example.weather;
@@ -17,7 +17,7 @@ final class TestWeatherProvider implements WeatherProvider {
         if ("Unknown".equals(city)) {
             throw new CityNotFoundException(city);
         }
-        return new WeatherObservation(city, "Clear sky", 18.5, 52, 12.0);
+        return new WeatherObservation("Clear sky", 18.5, 52, 12.0);
     }
 
     @Override

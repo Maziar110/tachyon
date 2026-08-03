@@ -1,9 +1,9 @@
 /*
- * Copyright (c) 2026 Konstantin Pavlov and contributors.
+ * Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors.
  */
 
 package com.example.weather.spi;
 
 public record WeatherObservation(
-    String city, String condition, double temperatureCelsius, int humidity, double windSpeed) {
+    String condition, double temperatureCelsius, int humidity, double windSpeed) {
 }
