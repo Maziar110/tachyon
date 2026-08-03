@@ -21,6 +21,7 @@ import dev.tachyonmcp.api.server.features.completions.CompletionResult;
 import dev.tachyonmcp.api.server.features.prompts.PromptRequest;
 import dev.tachyonmcp.api.server.features.prompts.PromptResult;
 import dev.tachyonmcp.core.server.TachyonServer;
+import dev.tachyonmcp.core.server.config.CapabilitiesConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tools.jackson.databind.ObjectMapper;
@@ -72,10 +73,11 @@ public final class WeatherServer {
                         .name("weather-server")
                         .title("Weather Server")
                         .description("Weather MCP server")
-                        .websiteUrl("https://github.com/kpavlov/tachyon/tree/main/examples/weather")
+                        .websiteUrl("https://github.com/kpavlov/tachyon/tree/main/examples/weather-mcp")
                         .instructions("Test instructions")
                         .icons(Icon.of(LOGO, "image/png", List.of("256x256"), null))
                         .version("1.0"))
+                .capabilities(c->c.logging())
                 .withTools(tools -> tools.register(GetWeatherTool.DESCRIPTOR, GetWeatherTool.fn(weatherService)))
                 .withResources(resources -> resources.register(
                         resource -> resource.name("prediction-article")
@@ -159,7 +161,11 @@ public final class WeatherServer {
             Map<String, UriTemplateValue> params) {
         var city = ((UriTemplateValue.Scalar) params.get("city")).value();
         try {
-            return TextResourceContents.of(uri, asJson(weatherService.currentWeather(city)), "application/json");
+            return TextResourceContents.builder()
+                .text(asJson(weatherService.currentWeather(city)))
+                .mimeType("application/json")
+                .uri(uri)
+                .build();
         } catch (CityNotFoundException e) {
             throw new InvalidArgumentException("city", e.getMessage());
         } catch (Exception e) {

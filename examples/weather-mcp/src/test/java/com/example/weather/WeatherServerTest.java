@@ -71,7 +71,7 @@ class WeatherServerTest {
         assertThat(initResult.serverInfo()).usingRecursiveComparison().ignoringFields("icons").isEqualTo(
             McpSchema.Implementation.builder("weather-server", "1.0")
                 .title("Weather Server")
-                .websiteUrl("https://github.com/kpavlov/tachyon/tree/main/examples/weather")
+                .websiteUrl("https://github.com/kpavlov/tachyon/tree/main/examples/weather-mcp")
                 .description("Weather MCP server")
                 .build());
         assertThat(initResult.serverInfo().icons()).singleElement().satisfies(icon -> {
@@ -85,6 +85,7 @@ class WeatherServerTest {
             .tools(null)
             .resources(null, null)
             .prompts(null)
+            .logging()
             .completions()
             .build());
     }
