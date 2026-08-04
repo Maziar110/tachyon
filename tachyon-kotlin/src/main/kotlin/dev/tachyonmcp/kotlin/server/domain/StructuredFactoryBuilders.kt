@@ -14,6 +14,7 @@ import dev.tachyonmcp.api.server.domain.ToolAnnotations
 import dev.tachyonmcp.kotlin.server.TachyonDsl
 import dev.tachyonmcp.kotlin.server.config.ResourceScope
 import tools.jackson.databind.JsonNode
+import java.util.Base64
 
 /** Builds [dev.tachyonmcp.api.server.domain.Annotations]. */
 @TachyonDsl
@@ -128,8 +129,22 @@ public class ToolAnnotationsBuilder
 public class ImageContentBuilder
     @PublishedApi
     internal constructor() {
-        /** Base64-encoded image bytes. */
-        public var data: String? = null
+        /** Raw image bytes. */
+        public var data: ByteArray? = null
+
+        /**
+         * Base64-encoded image bytes.
+         *
+         * @deprecated base64-encoded String input is deprecated; assign raw bytes to [data] instead
+         */
+        @Deprecated(
+            "Base64-encoded String input is deprecated; assign raw bytes to `data` instead.",
+        )
+        public var dataBase64: String?
+            get() = data?.let { Base64.getEncoder().encodeToString(it) }
+            set(value) {
+                data = value?.let { Base64.getDecoder().decode(it) }
+            }
 
         /** Image MIME type. */
         public var mimeType: String? = null
@@ -142,7 +157,7 @@ public class ImageContentBuilder
 
         @PublishedApi
         internal fun build(): ImageContent =
-            ImageContent.base64(
+            ImageContent.of(
                 requireNotNull(data) { "ImageContent.data is required" },
                 requireNotNull(mimeType) { "ImageContent.mimeType is required" },
                 annotations,
@@ -155,8 +170,22 @@ public class ImageContentBuilder
 public class AudioContentBuilder
     @PublishedApi
     internal constructor() {
-        /** Base64-encoded audio bytes. */
-        public var data: String? = null
+        /** Raw audio bytes. */
+        public var data: ByteArray? = null
+
+        /**
+         * Base64-encoded audio bytes.
+         *
+         * @deprecated base64-encoded String input is deprecated; assign raw bytes to [data] instead
+         */
+        @Deprecated(
+            "Base64-encoded String input is deprecated; assign raw bytes to `data` instead.",
+        )
+        public var dataBase64: String?
+            get() = data?.let { Base64.getEncoder().encodeToString(it) }
+            set(value) {
+                data = value?.let { Base64.getDecoder().decode(it) }
+            }
 
         /** Audio MIME type. */
         public var mimeType: String? = null
@@ -169,7 +198,7 @@ public class AudioContentBuilder
 
         @PublishedApi
         internal fun build(): AudioContent =
-            AudioContent.base64(
+            AudioContent.of(
                 requireNotNull(data) { "AudioContent.data is required" },
                 requireNotNull(mimeType) { "AudioContent.mimeType is required" },
                 annotations,
@@ -187,8 +216,22 @@ public class BlobResourceContentsBuilder
         /** Resource URI. */
         public var uri: String? = scope?.uri
 
-        /** Base64-encoded resource bytes. */
-        public var blob: String? = null
+        /** Raw resource bytes. */
+        public var data: ByteArray? = null
+
+        /**
+         * Base64-encoded resource bytes.
+         *
+         * @deprecated base64-encoded String input is deprecated; assign raw bytes to [data] instead
+         */
+        @Deprecated(
+            "Base64-encoded String input is deprecated; assign raw bytes to `data` instead.",
+        )
+        public var dataBase64: String?
+            get() = data?.let { Base64.getEncoder().encodeToString(it) }
+            set(value) {
+                data = value?.let { Base64.getDecoder().decode(it) }
+            }
 
         /** Resource MIME type. */
         public var mimeType: String? = scope?.registeredMimeType
@@ -203,7 +246,7 @@ public class BlobResourceContentsBuilder
                     "BlobResourceContents.uri is required: set it explicitly, or build inside a " +
                         "resource/template handler where BlobResourceContents { } defaults it from the request"
                 },
-                requireNotNull(blob) { "BlobResourceContents.blob is required" },
+                requireNotNull(data) { "BlobResourceContents.data is required" },
                 mimeType,
                 meta,
             )

@@ -1,88 +1,25 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.api.server.features.tools;
 
-import dev.tachyonmcp.api.annotations.ExperimentalApi;
 import dev.tachyonmcp.api.json.JsonDocument;
 import dev.tachyonmcp.api.server.domain.ContentBlock;
+import dev.tachyonmcp.api.server.domain.HasMeta;
 import dev.tachyonmcp.api.server.domain.InputRequest;
 import dev.tachyonmcp.api.server.domain.InputRequestBundle;
 import dev.tachyonmcp.api.server.domain.TextContent;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
+import org.immutables.value.Value;
 import org.jspecify.annotations.Nullable;
 
-/** Outcome of a tool invocation: success, error, input-required, or deferred. */
-public sealed interface ToolResult
-        permits ToolResult.Success,
-                ToolResult.Error,
-                ToolResult.WithMeta,
-                ToolResult.InputRequired,
-                ToolResult.Deferred {
+/** Outcome of a tool invocation: success, error, input-required. */
+public sealed interface ToolResult extends HasMeta
+        permits ToolResult.Success, ToolResult.Error, ToolResult.InputRequired {
 
-    /** Sentinel returned by a task-augmented handler that defers completion to the caller. */
-    record Deferred() implements ToolResult {}
-
-    /**
-     * A successful invocation, carrying an optional structured value and its content blocks.
-     *
-     * @param structuredValue the structured payload, or {@code null} when none was set
-     * @param content         the content blocks, possibly empty
-     */
-    record Success(@Nullable Object structuredValue, List<ContentBlock> content) implements ToolResult {
-        public Success {
-            Objects.requireNonNull(content, "content");
-            content = List.copyOf(content);
-        }
-
-        /** Returns the structured value, or empty when none was set. */
-        public Optional<Object> structured() {
-            return Optional.ofNullable(structuredValue);
-        }
-    }
-
-    /**
-     * A failed invocation carrying a human-readable error message.
-     *
-     * @param message the error message
-     */
-    record Error(String message) implements ToolResult {}
-
-    /**
-     * Wraps another result with request-level {@code _meta} entries.
-     *
-     * @param inner the wrapped result
-     * @param meta  the {@code _meta} entries
-     */
-    record WithMeta(ToolResult inner, Map<String, Object> meta) implements ToolResult {
-        public WithMeta {
-            Objects.requireNonNull(inner, "inner");
-            Objects.requireNonNull(meta, "meta");
-            meta = Map.copyOf(meta);
-        }
-    }
-
-    /**
-     * Signals that completing the tool call requires additional input from the caller.
-     *
-     * @param request the requested inputs and opaque state to echo back
-     */
-    record InputRequired(InputRequestBundle request) implements ToolResult {
-        public InputRequired {
-            Objects.requireNonNull(request, "request");
-        }
-
-        /** Returns the requested inputs, keyed by request id. */
-        public Map<String, ? extends InputRequest> inputRequests() {
-            return request.inputRequests();
-        }
-
-        /** Returns the opaque state token to echo back with the caller's response, or {@code null}. */
-        public @Nullable String requestState() {
-            return request.requestState();
-        }
+    @Override
+    default @Nullable Map<String, Object> meta() {
+        return null;
     }
 
     /**
@@ -92,15 +29,7 @@ public sealed interface ToolResult
      * @param m the {@code _meta} entries to merge in
      * @return a result carrying the merged metadata
      */
-    default ToolResult withMeta(Map<String, Object> m) {
-        if (m.isEmpty()) return this;
-        if (this instanceof WithMeta(ToolResult inner, Map<String, Object> meta)) {
-            var merged = new HashMap<>(meta);
-            merged.putAll(m);
-            return new WithMeta(inner, merged);
-        }
-        return new WithMeta(this, m);
-    }
+    ToolResult withMeta(Map<String, Object> m);
 
     /**
      * Returns a copy of this result with a single {@code _meta} entry set.
@@ -114,13 +43,280 @@ public sealed interface ToolResult
     }
 
     /**
+     * A successful invocation, carrying an optional structured value and its content blocks.
+     */
+    @Value.Immutable
+    @Value.Style(
+            visibility = Value.Style.ImplementationVisibility.PACKAGE,
+            typeImmutable = "Default*",
+            with = "",
+            from = "")
+    non-sealed interface Success extends ToolResult {
+
+        /**
+         * Returns the structured payload, or {@code null} when none was set.
+         *
+         * @return the structured payload, or {@code null}
+         */
+        @Nullable
+        Object structuredValue();
+
+        /**
+         * Returns the content blocks, possibly empty.
+         *
+         * @return the content blocks
+         */
+        List<ContentBlock> content();
+
+        @Override
+        @Nullable
+        Map<String, Object> meta();
+
+        /** Returns the structured value, or empty when none was set. */
+        default Optional<Object> structured() {
+            return Optional.ofNullable(structuredValue());
+        }
+
+        @Override
+        default Success withMeta(Map<String, Object> m) {
+            if (m.isEmpty()) return this;
+            return builder()
+                    .structuredValue(structuredValue())
+                    .content(content())
+                    .meta(HasMeta.merge(meta(), m))
+                    .build();
+        }
+
+        /**
+         * Creates a new builder for constructing {@code Success} instances.
+         *
+         * @return a new builder
+         */
+        static Builder builder() {
+            return DefaultSuccess.builder();
+        }
+
+        /**
+         * Creates a successful result with no {@code _meta}.
+         *
+         * @param structuredValue the structured payload, or {@code null} when none was set
+         * @param content         the content blocks, possibly empty
+         * @return a new successful result
+         */
+        static Success of(@Nullable Object structuredValue, List<ContentBlock> content) {
+            return builder().structuredValue(structuredValue).content(content).build();
+        }
+
+        /**
+         * Builder for {@link Success}.
+         */
+        interface Builder {
+            /**
+             * Sets the structured payload.
+             *
+             * @param structuredValue the structured payload, or {@code null}
+             * @return this builder
+             */
+            Builder structuredValue(@Nullable Object structuredValue);
+
+            /**
+             * Sets the content blocks.
+             *
+             * @param content the content blocks
+             * @return this builder
+             */
+            Builder content(Iterable<? extends ContentBlock> content);
+
+            /**
+             * Sets the content blocks.
+             *
+             * @param content the content blocks
+             * @return this builder
+             */
+            default Builder content(ContentBlock... content) {
+                return content(List.of(content));
+            }
+
+            /**
+             * Sets the metadata entries.
+             *
+             * @param meta the metadata map, or {@code null}
+             * @return this builder
+             */
+            Builder meta(@Nullable Map<String, ?> meta);
+
+            /**
+             * Builds the {@code Success} instance.
+             *
+             * @return a new successful result
+             */
+            Success build();
+        }
+    }
+
+    /**
+     * A failed invocation carrying the error's content blocks.
+     */
+    @Value.Immutable
+    @Value.Style(
+            visibility = Value.Style.ImplementationVisibility.PACKAGE,
+            typeImmutable = "Default*",
+            with = "",
+            from = "")
+    non-sealed interface Error extends ToolResult {
+
+        /**
+         * Returns the error content blocks.
+         *
+         * @return the error content blocks
+         */
+        List<ContentBlock> content();
+
+        @Override
+        @Nullable
+        Map<String, Object> meta();
+
+        /**
+         * Creates a new builder for constructing {@code Error} instances.
+         *
+         * @return a new builder
+         */
+        static Builder builder() {
+            return DefaultError.builder();
+        }
+
+        /**
+         * Creates a failed result carrying the given content blocks.
+         *
+         * @param content the error content blocks
+         * @return a new error
+         */
+        static Error of(List<? extends ContentBlock> content) {
+            return DefaultError.builder().content(content).build();
+        }
+
+        @Override
+        default Error withMeta(Map<String, Object> m) {
+            if (m.isEmpty()) return this;
+            return builder().content(content()).meta(HasMeta.merge(meta(), m)).build();
+        }
+
+        /**
+         * Builder for {@link Error}.
+         */
+        interface Builder {
+            /**
+             * Sets the error content blocks.
+             *
+             * @param content the error content blocks
+             * @return this builder
+             */
+            Builder content(Iterable<? extends ContentBlock> content);
+
+            /**
+             * Sets the error content blocks.
+             *
+             * @param content the error content blocks
+             * @return this builder
+             */
+            default Builder content(ContentBlock... content) {
+                return content(List.of(content));
+            }
+
+            /**
+             * Sets the metadata entries.
+             *
+             * @param meta the metadata map, or {@code null}
+             * @return this builder
+             */
+            Builder meta(@Nullable Map<String, ?> meta);
+
+            /**
+             * Builds the {@code Error} instance.
+             *
+             * @return a new error
+             */
+            Error build();
+        }
+    }
+
+    /**
+     * Signals that completing the tool call requires additional input from the caller.
+     */
+    @Value.Immutable
+    @Value.Style(
+            visibility = Value.Style.ImplementationVisibility.PACKAGE,
+            typeImmutable = "Default*",
+            with = "",
+            from = "")
+    non-sealed interface InputRequired extends ToolResult, dev.tachyonmcp.api.server.domain.InputRequired {
+
+        @Override
+        @Nullable
+        Map<String, Object> meta();
+
+        /**
+         * Creates a new builder for constructing {@code InputRequired} instances.
+         *
+         * @return a new builder
+         */
+        static Builder builder() {
+            return DefaultInputRequired.builder();
+        }
+
+        /**
+         * Creates an input-required result with no {@code _meta}.
+         *
+         * @param request the requested inputs and opaque state to echo back
+         * @return a new input-required result
+         */
+        static InputRequired of(InputRequestBundle request) {
+            return builder().request(request).build();
+        }
+
+        @Override
+        default InputRequired withMeta(Map<String, Object> m) {
+            if (m.isEmpty()) return this;
+            return builder().request(request()).meta(HasMeta.merge(meta(), m)).build();
+        }
+
+        /**
+         * Builder for {@link InputRequired}.
+         */
+        interface Builder {
+            /**
+             * Sets the requested inputs and opaque state to echo back.
+             *
+             * @param request the input request bundle
+             * @return this builder
+             */
+            Builder request(InputRequestBundle request);
+
+            /**
+             * Sets the metadata entries.
+             *
+             * @param meta the metadata map, or {@code null}
+             * @return this builder
+             */
+            Builder meta(@Nullable Map<String, ?> meta);
+
+            /**
+             * Builds the {@code InputRequired} instance.
+             *
+             * @return a new input-required result
+             */
+            InputRequired build();
+        }
+    }
+
+    /**
      * Creates a successful result containing a single text content block.
      *
      * @param t the text
      * @return a successful tool result
      */
     static ToolResult text(String t) {
-        return new Success(null, List.of(TextContent.of(t)));
+        return Success.of(null, List.of(TextContent.of(t)));
     }
 
     /**
@@ -130,19 +326,7 @@ public sealed interface ToolResult
      * @return a successful tool result
      */
     static ToolResult content(ContentBlock... blocks) {
-        return new Success(null, List.of(blocks));
-    }
-
-    /**
-     * Creates a successful result containing the given content blocks.
-     *
-     * @param blocks the content blocks
-     * @return a successful tool result
-     * @deprecated use {@link #content(ContentBlock...)}
-     */
-    @Deprecated(since = "1.0.0-beta.15", forRemoval = true)
-    static ToolResult blocks(ContentBlock... blocks) {
-        return content(blocks);
+        return Success.of(null, List.of(blocks));
     }
 
     /**
@@ -153,59 +337,47 @@ public sealed interface ToolResult
      * @param text    the text content for the content block
      * @return a successful tool result
      */
-    static ToolResult of(Object payload, String text) {
-        return new Success(payload, List.of(TextContent.of(text)));
-    }
-
-    /**
-     * Alias for {@link #of(Object, String)} with a name that states what the payload becomes
-     * (structured content) rather than how it's constructed.
-     *
-     * @param payload the structured payload
-     * @param text    the text content for the content block
-     * @return a successful tool result
-     */
-    @ExperimentalApi
-    static ToolResult structured(Object payload, String text) {
-        return of(payload, text);
+    static <T> ToolResult structured(T payload, String text) {
+        return Success.of(payload, List.of(TextContent.of(text)));
     }
 
     /**
      * Creates a success result carrying {@code payload} as structured content with no text block.
      *
      * <p>The server emits the serialized JSON of {@code payload} as the text content at encode
-     * time (MCP backwards-compat for structured results). Use {@link #of(Object, String)} to
-     * supply an explicit human-readable text block instead.
-     */
-    static ToolResult of(Object payload) {
-        return new Success(payload, List.of());
-    }
-
-    /**
-     * Alias for {@link #of(Object)} with a name that states what the payload becomes (structured
-     * content) rather than how it's constructed.
+     * time (MCP backwards-compat for structured results). Use {@link #structured(Object, String)}
+     * to supply an explicit human-readable text block instead.
      *
      * @param payload the structured payload
      * @return a successful tool result
      */
-    @ExperimentalApi
-    static ToolResult structured(Object payload) {
-        return of(payload);
+    static <T> ToolResult structured(T payload) {
+        return Success.of(payload, List.of());
     }
 
     /**
-     * Creates a failed result with the given error message.
+     * Creates a failed result with a single text content block carrying the given error message.
      *
      * @param message the error message
      * @return a failed tool result
      */
     static ToolResult error(String message) {
-        return new Error(message);
+        return Error.of(List.of(TextContent.of(message)));
+    }
+
+    /**
+     * Creates a failed result carrying the given content blocks.
+     *
+     * @param blocks the error content blocks
+     * @return a failed tool result
+     */
+    static ToolResult error(ContentBlock... blocks) {
+        return Error.of(List.of(blocks));
     }
 
     /** Creates a successful result with no structured value and no content. */
     static ToolResult empty() {
-        return new Success(null, List.of());
+        return Success.of(null, List.of());
     }
 
     /**
@@ -217,7 +389,7 @@ public sealed interface ToolResult
      * @param text the text content for the content block
      */
     static ToolResult raw(String json, String text) {
-        return new Success(JsonDocument.of(json), List.of(TextContent.of(text)));
+        return Success.of(JsonDocument.of(json), List.of(TextContent.of(text)));
     }
 
     /**
@@ -229,6 +401,6 @@ public sealed interface ToolResult
      * @return a result signaling that input is required
      */
     static ToolResult inputRequired(Map<String, ? extends InputRequest> reqs, @Nullable String state) {
-        return new InputRequired(new InputRequestBundle(reqs, state));
+        return ToolResult.InputRequired.of(new InputRequestBundle(reqs, state));
     }
 }

@@ -29,11 +29,18 @@ final class ResourceFnExample {
     }
 
     /**
-     * Static resource — binary (image, PDF, etc).
+     * Static resource — binary (image, PDF, etc). blob() accepts raw bytes; use the InputStream
+     * overload to read directly from a file or classpath resource.
      */
     static ResourceFn imageHandler() {
-        return (ctx, request) ->
-            BlobResourceContents.of(request.uri(), "iVBORw0KGgoAAAANS...", "image/png");
+        return (ctx, request) -> {
+            try (var stream = ResourceFnExample.class.getResourceAsStream("/logo.png")) {
+                if (stream == null) {
+                    throw new IllegalStateException("Missing classpath resource: /logo.png");
+                }
+                return BlobResourceContents.of(request.uri(), stream.readAllBytes(), "image/png");
+            }
+        };
     }
 
     /**
@@ -60,10 +67,10 @@ final class ResourceFnExample {
      * URI template — multi-segment with static prefix matching.
      */
     static ResourceTemplateDescriptor forecastTemplateDescriptor() {
-        return ResourceTemplateDescriptor.of(
-            "forecast", //name
-            "weather://forecast/{city}" //uriTemplate
-        );
+        return ResourceTemplateDescriptor.builder()
+            .name("forecast")
+            .uriTemplate("weather://forecast/{city}")
+            .build();
     }
 
     static ResourceFn forecastTemplateHandler() {

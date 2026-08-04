@@ -11,12 +11,11 @@ import dev.tachyonmcp.api.json.JsonSchemaValidator;
 import dev.tachyonmcp.api.json.PayloadDeserializer;
 import dev.tachyonmcp.api.json.PayloadSerializer;
 import dev.tachyonmcp.api.json.SchemaValidationError;
-import dev.tachyonmcp.api.server.domain.ContentBlock;
 import dev.tachyonmcp.api.server.domain.LoggingLevel;
 import dev.tachyonmcp.api.server.domain.ServerError;
 import dev.tachyonmcp.api.server.domain.TaskResult;
-import dev.tachyonmcp.api.server.domain.TextContent;
 import dev.tachyonmcp.api.server.features.HandlerFutures;
+import dev.tachyonmcp.api.server.features.tasks.TaskState;
 import dev.tachyonmcp.api.server.features.tasks.TaskSupport;
 import dev.tachyonmcp.api.server.features.tools.ToolHandler;
 import dev.tachyonmcp.api.server.features.tools.ToolRequest;
@@ -29,7 +28,6 @@ import dev.tachyonmcp.core.server.features.tasks.TaskRegistry;
 import dev.tachyonmcp.core.server.json.JsonUtils;
 import dev.tachyonmcp.core.server.session.DispatchContext;
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
@@ -160,6 +158,7 @@ public final class ToolMethodHandlers {
                     request.meta(),
                     OutboundSseStreamMessageRouter.currentSessionId(),
                     request.progressToken());
+            task.transitionTo(TaskState.WORKING);
             var taskRequest = ToolRequest.builder()
                     .name(request.name())
                     .arguments(request.arguments())
@@ -172,7 +171,7 @@ public final class ToolMethodHandlers {
                     .build();
 
             var future = new CompletableFuture<ToolResult>();
-            var handlerFuture = new AtomicReference<CompletableFuture<? extends ToolResult>>();
+            var handlerFuture = new AtomicReference<@Nullable CompletableFuture<? extends ToolResult>>();
             var dispatchFuture = context.engine().executor().submit(() -> {
                 if (future.isCancelled()) return;
                 try {
@@ -218,17 +217,15 @@ public final class ToolMethodHandlers {
         }
 
         private void completeTask(TaskRegistry taskRegistry, TaskEntry task, @Nullable ToolResult result) {
-            if (result == null || result instanceof ToolResult.Deferred) return;
+            if (result == null) return;
             result = JsonUtils.serializeStructured(result, payloadSerializer);
-            Map<String, Object> meta = null;
-            if (result instanceof ToolResult.WithMeta(ToolResult inner, Map<String, Object> resultMeta)) {
-                result = inner;
-                meta = resultMeta;
-            }
-            if (result instanceof ToolResult.Error(String message)) {
-                task.fail(new TaskResult.Failed(List.of(TextContent.of(message)), null, meta));
-            } else if (result instanceof ToolResult.Success(Object structuredValue, List<ContentBlock> content)) {
-                task.complete(new TaskResult.Completed(content, structuredValue, meta));
+            var meta = result.meta();
+            if (result instanceof ToolResult.Error error) {
+                task.fail(new TaskResult.Failed(error.content(), null, meta));
+            } else if (result instanceof ToolResult.Success success) {
+                task.complete(new TaskResult.Completed(success.content(), success.structuredValue(), meta));
+            } else if (result instanceof ToolResult.InputRequired inputRequired) {
+                task.requireInput(inputRequired.request(), null);
             }
             taskRegistry.unregisterRunning(task.id());
         }
@@ -242,8 +239,7 @@ public final class ToolMethodHandlers {
 
         private void validateOutput(@Nullable JsonSchema schema, ToolResult result) {
             if (schema == null || outputValidator == JsonSchemaValidator.noop()) return;
-            var inner = result instanceof ToolResult.WithMeta withMeta ? withMeta.inner() : result;
-            if (!(inner instanceof ToolResult.Success success) || success.structuredValue() == null) return;
+            if (!(result instanceof ToolResult.Success success) || success.structuredValue() == null) return;
             var value = success.structuredValue();
             var json = value instanceof JsonDocument document ? document.json() : payloadSerializer.serialize(value);
             var errors = outputValidator.validate(schema, JsonDocument.of(json));

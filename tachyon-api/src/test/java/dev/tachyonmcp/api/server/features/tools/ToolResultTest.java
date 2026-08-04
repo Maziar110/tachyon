@@ -3,10 +3,14 @@ package dev.tachyonmcp.api.server.features.tools;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import dev.tachyonmcp.api.server.domain.*;
+import dev.tachyonmcp.api.server.domain.AudioContent;
+import dev.tachyonmcp.api.server.domain.ContentBlock;
+import dev.tachyonmcp.api.server.domain.ImageContent;
+import dev.tachyonmcp.api.server.domain.InputRequest;
+import dev.tachyonmcp.api.server.domain.TextContent;
+import dev.tachyonmcp.api.server.domain.UrlInputRequest;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
@@ -20,35 +24,30 @@ class ToolResultTest {
     }
 
     @Test
-    @SuppressWarnings("removal")
-    void deprecatedResponseFactoriesDelegateToCanonicalFactories() {
-        var image = ImageContent.of("aGVsbG8=", "image/png");
-        var audio = AudioContent.of("aGVsbG8=", "audio/wav");
-        var result = ToolResult.blocks(image, audio);
+    void contentFactoryCarriesImageAndAudioBlocks() {
+        var bytes = new byte[] {3, 2, 1};
+        var image = ImageContent.of(bytes, "image/png");
+        var audio = AudioContent.of(bytes, "audio/wav");
+        var result = ToolResult.content(image, audio);
 
-        assertThat(image).isEqualTo(ImageContent.base64("aGVsbG8=", "image/png"));
-        assertThat(audio).isEqualTo(AudioContent.base64("aGVsbG8=", "audio/wav"));
+        var copy = bytes.clone();
+        assertThat(image).isEqualTo(ImageContent.of(copy, "image/png"));
+        assertThat(audio).isEqualTo(AudioContent.of(copy, "audio/wav"));
         assertThat(((ToolResult.Success) result).content()).containsExactly(image, audio);
     }
 
     @Test
-    void experimentalStructuredAliasesOf() {
-        assertThat(ToolResult.structured(42)).isEqualTo(ToolResult.of(42));
-        assertThat(ToolResult.structured("data", "custom text")).isEqualTo(ToolResult.of("data", "custom text"));
-    }
-
-    @Test
-    void successAllowsNullStructuredAndEmptyContent() {
-        var r = new ToolResult.Success(null, List.of());
-        assertThat(r.structured()).isEmpty();
+    void structuredWithoutTextHasNoContent() {
+        var r = (ToolResult.Success) ToolResult.structured(42);
+        assertThat(r.structured()).contains(42);
         assertThat(r.content()).isEmpty();
     }
 
     @Test
-    void successWithStructuredAndNoContentIsAllowed() {
-        var r = new ToolResult.Success("data", List.of());
+    void structuredWithTextCarriesContent() {
+        var r = (ToolResult.Success) ToolResult.structured("data", "custom text");
         assertThat(r.structured()).contains("data");
-        assertThat(r.content()).isEmpty();
+        assertThat(((TextContent) r.content().getFirst()).text()).isEqualTo("custom text");
     }
 
     @Test
@@ -66,10 +65,8 @@ class ToolResultTest {
         var base = ToolResult.text("x").withMeta("a", 1);
         var merged = base.withMeta("b", 2);
 
-        assertThat(merged).isInstanceOf(ToolResult.WithMeta.class);
-        var wm = (ToolResult.WithMeta) merged;
-        assertThat(wm.inner()).isNotInstanceOf(ToolResult.WithMeta.class);
-        assertThat(wm.meta()).containsKey("a").containsKey("b");
+        assertThat(merged).isInstanceOf(ToolResult.Success.class);
+        assertThat(merged.meta()).containsKey("a").containsKey("b");
     }
 
     @Test
@@ -77,8 +74,7 @@ class ToolResultTest {
         var base = ToolResult.text("x").withMeta("k", 1);
         var updated = base.withMeta("k", 99);
 
-        var wm = (ToolResult.WithMeta) updated;
-        assertThat(wm.meta().get("k")).isEqualTo(99);
+        assertThat(updated.meta()).containsEntry("k", 99);
     }
 
     @Test
@@ -93,15 +89,14 @@ class ToolResultTest {
         source.put("k", 1);
         var r = ToolResult.text("x").withMeta(source);
         source.put("injected", 99);
-        var wm = (ToolResult.WithMeta) r;
-        assertThat(wm.meta()).doesNotContainKey("injected");
+        assertThat(r.meta()).doesNotContainKey("injected");
     }
 
     @Test
     void successContentIsDefensiveCopy() {
         var list = new java.util.ArrayList<ContentBlock>();
         list.add(TextContent.of("a"));
-        var r = new ToolResult.Success(null, list);
+        var r = ToolResult.Success.of(null, list);
         list.add(TextContent.of("b"));
         assertThat(r.content()).hasSize(1);
     }
@@ -110,7 +105,19 @@ class ToolResultTest {
     void errorIsErrorResult() {
         ToolResult err = ToolResult.error("boom");
 
-        assertThat(err).isInstanceOf(ToolResult.Error.class).hasFieldOrPropertyWithValue("message", "boom");
+        assertThat(err).isInstanceOf(ToolResult.Error.class);
+        var content = ((ToolResult.Error) err).content();
+        assertThat(content).hasSize(1);
+        assertThat(((TextContent) content.getFirst()).text()).isEqualTo("boom");
+    }
+
+    @Test
+    void errorFactoryAcceptsContentBlocks() {
+        var image = ImageContent.of(new byte[] {1, 2, 3}, "image/png");
+        ToolResult err = ToolResult.error(TextContent.of("boom"), image);
+
+        assertThat(err).isInstanceOf(ToolResult.Error.class);
+        assertThat(((ToolResult.Error) err).content()).containsExactly(TextContent.of("boom"), image);
     }
 
     @Test
@@ -126,10 +133,8 @@ class ToolResultTest {
     @Test
     void failureCanCarryMeta() {
         ToolResult err = ToolResult.error("oops").withMeta("trace", "id-1");
-        assertThat(err).isInstanceOf(ToolResult.WithMeta.class);
-        var wm = (ToolResult.WithMeta) err;
-        assertThat(wm.inner()).isInstanceOf(ToolResult.Error.class);
-        assertThat(wm.meta().get("trace")).isEqualTo("id-1");
+        assertThat(err).isInstanceOf(ToolResult.Error.class);
+        assertThat(err.meta()).containsEntry("trace", "id-1");
     }
 
     @Test
@@ -152,20 +157,10 @@ class ToolResultTest {
     }
 
     @Test
-    void ofFactoryWithPayload() {
-        ToolResult r = ToolResult.of(42);
-        assertThat(r).isInstanceOf(ToolResult.Success.class);
-        var s = (ToolResult.Success) r;
-        assertThat(s.structured()).contains(42);
-        assertThat(s.content()).isEmpty();
-    }
-
-    @Test
-    void ofFactoryWithPayloadAndText() {
-        ToolResult r = ToolResult.of("data", "custom text");
-        assertThat(r).isInstanceOf(ToolResult.Success.class);
-        var s = (ToolResult.Success) r;
-        assertThat(s.structured()).contains("data");
-        assertThat(((TextContent) s.content().getFirst()).text()).isEqualTo("custom text");
+    void inputRequiredWithMetaMerges() {
+        var r = ToolResult.inputRequired(Map.of(), "state-1").withMeta("trace", "id-1");
+        assertThat(r).isInstanceOf(ToolResult.InputRequired.class);
+        assertThat(r.meta()).containsEntry("trace", "id-1");
+        assertThat(((ToolResult.InputRequired) r).requestState()).isEqualTo("state-1");
     }
 }

@@ -1,6 +1,8 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.api.server.domain;
 
+import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.util.Map;
 import org.immutables.value.Value;
 import org.jspecify.annotations.Nullable;
@@ -8,8 +10,9 @@ import org.jspecify.annotations.Nullable;
 /**
  * An image provided to or from an LLM.
  *
- * <p>The image data is base64-encoded in {@code data}, with the corresponding
- * {@code mimeType} describing the format (e.g. {@code image/png}, {@code image/jpeg}).
+ * <p>The image data is carried as raw bytes in {@code data}, with the corresponding
+ * {@code mimeType} describing the format (e.g. {@code image/png}, {@code image/jpeg}). On the
+ * wire, {@code data} is base64-encoded per the MCP protocol.
  */
 @Value.Immutable
 @Value.Style(
@@ -19,12 +22,12 @@ import org.jspecify.annotations.Nullable;
 public non-sealed interface ImageContent extends ContentBlock {
 
     /**
-     * Returns the base64-encoded image data.
+     * Returns the raw image data.
      *
-     * @return the image data as a base64 string
+     * @return the image data
      */
     @Value.Redacted
-    String data();
+    byte[] data();
 
     /**
      * Returns the MIME type of the image content.
@@ -57,11 +60,11 @@ public non-sealed interface ImageContent extends ContentBlock {
     /**
      * Validates that required fields are not blank.
      *
-     * @throws IllegalArgumentException if {@code data} or {@code mimeType} is blank
+     * @throws IllegalArgumentException if {@code data} is empty or {@code mimeType} is blank
      */
     @Value.Check
     default void check() {
-        if (data().isBlank()) throw new IllegalArgumentException("data must not be blank");
+        if (data().length == 0) throw new IllegalArgumentException("data must not be empty");
         if (mimeType().isBlank()) throw new IllegalArgumentException("mimeType must not be blank");
     }
 
@@ -75,67 +78,38 @@ public non-sealed interface ImageContent extends ContentBlock {
     }
 
     /**
-     * Creates an image content block from base64-encoded data, with no metadata or annotations.
+     * Creates an image content block, with no metadata or annotations.
      *
-     * @param data     the base64-encoded image data
+     * @param data     the image data
      * @param mimeType the image MIME type (e.g. {@code image/png})
+     * @return a new image content
      */
-    static ImageContent base64(String data, String mimeType) {
+    static ImageContent of(byte[] data, String mimeType) {
         return DefaultImageContent.of(data, mimeType, null, null);
     }
 
     /**
-     * Creates an image content block from base64-encoded data.
+     * Creates an image content block by reading all bytes from {@code data}, with no metadata or
+     * annotations.
      *
-     * @param data the base64-encoded image data
-     * @param mimeType the image MIME type
-     * @return a new image content block
-     * @deprecated use {@link #base64(String, String)}
+     * @param data     the image data stream, read fully but not closed by this method
+     * @param mimeType the image MIME type (e.g. {@code image/png})
+     * @throws UncheckedIOException if reading {@code data} fails
+     * @return a new image content
      */
-    @Deprecated(since = "1.0.0-beta.15", forRemoval = true)
-    static ImageContent of(String data, String mimeType) {
-        return base64(data, mimeType);
+    static ImageContent of(InputStream data, String mimeType) {
+        return of(BinaryData.readAllBytes(data), mimeType);
     }
 
-    /** Creates an image content block from base64-encoded data with given annotations and no metadata. */
-    static ImageContent base64(String data, String mimeType, @Nullable Annotations annotations) {
+    /** Creates an image content block with given annotations and no metadata. */
+    static ImageContent of(byte[] data, String mimeType, @Nullable Annotations annotations) {
         return DefaultImageContent.of(data, mimeType, annotations, null);
     }
 
-    /**
-     * Creates an image content block from base64-encoded data with annotations.
-     *
-     * @param data the base64-encoded image data
-     * @param mimeType the image MIME type
-     * @param annotations the annotations, or {@code null}
-     * @return a new image content block
-     * @deprecated use {@link #base64(String, String, Annotations)}
-     */
-    @Deprecated(since = "1.0.0-beta.15", forRemoval = true)
-    static ImageContent of(String data, String mimeType, @Nullable Annotations annotations) {
-        return base64(data, mimeType, annotations);
-    }
-
-    /** Creates an image content block from base64-encoded data with metadata and optional annotations. */
-    static ImageContent base64(
-            String data, String mimeType, @Nullable Annotations annotations, @Nullable Map<String, Object> meta) {
-        return DefaultImageContent.of(data, mimeType, annotations, meta);
-    }
-
-    /**
-     * Creates an image content block from base64-encoded data with annotations and metadata.
-     *
-     * @param data the base64-encoded image data
-     * @param mimeType the image MIME type
-     * @param annotations the annotations, or {@code null}
-     * @param meta the metadata, or {@code null}
-     * @return a new image content block
-     * @deprecated use {@link #base64(String, String, Annotations, Map)}
-     */
-    @Deprecated(since = "1.0.0-beta.15", forRemoval = true)
+    /** Creates an image content block with metadata and optional annotations. */
     static ImageContent of(
-            String data, String mimeType, @Nullable Annotations annotations, @Nullable Map<String, Object> meta) {
-        return base64(data, mimeType, annotations, meta);
+            byte[] data, String mimeType, @Nullable Annotations annotations, @Nullable Map<String, Object> meta) {
+        return DefaultImageContent.of(data, mimeType, annotations, meta);
     }
 
     /**
@@ -143,12 +117,23 @@ public non-sealed interface ImageContent extends ContentBlock {
      */
     interface Builder {
         /**
-         * Sets the base64-encoded image data.
+         * Sets the image data.
          *
          * @param data the image data
          * @return this builder
          */
-        Builder data(String data);
+        Builder data(byte[] data);
+
+        /**
+         * Sets the image data by reading all bytes from {@code data}.
+         *
+         * @param data the image data stream, read fully but not closed by this method
+         * @return this builder
+         * @throws UncheckedIOException if reading {@code data} fails
+         */
+        default Builder data(InputStream data) {
+            return data(BinaryData.readAllBytes(data));
+        }
 
         /**
          * Sets the MIME type of the image content.
