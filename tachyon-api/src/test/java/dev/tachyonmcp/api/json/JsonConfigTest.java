@@ -2,7 +2,9 @@
 package dev.tachyonmcp.api.json;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
+import dev.tachyonmcp.api.json.spi.JsonSchemaFactory;
 import dev.tachyonmcp.api.server.config.JsonConfig;
 import java.lang.reflect.Type;
 import java.util.List;
@@ -40,18 +42,22 @@ class JsonConfigTest {
             }
         };
         var validator = (JsonSchemaValidator) (schema, arguments) -> List.of();
+        @SuppressWarnings("unchecked")
+        var schemaFactory = (JsonSchemaFactory<String>) mock(JsonSchemaFactory.class);
 
         var config = JsonConfig.builder()
                 .serializer(ser)
                 .deserializer(deser)
                 .inputSchemaValidator(validator)
                 .outputSchemaValidator(validator)
+                .schemaFactory(schemaFactory)
                 .build();
 
         assertThat(config.serializer()).isSameAs(ser);
         assertThat(config.deserializer()).isSameAs(deser);
         assertThat(config.inputValidator()).isSameAs(validator);
         assertThat(config.outputValidator()).isSameAs(validator);
+        assertThat(config.schemaFactory()).isSameAs(schemaFactory);
     }
 
     @Test

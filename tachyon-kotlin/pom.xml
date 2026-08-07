@@ -54,6 +54,13 @@
             <artifactId>kotlinx-serialization-json</artifactId>
             <version>${kotlinx-serialization-json.version}</version>
         </dependency>
+        <!-- Optional: backs KtSchemaJsonSchemaFactory; only needed by consumers using typedTool -->
+        <dependency>
+            <groupId>me.kpavlov.kt.schema</groupId>
+            <artifactId>kt-schema-generator-json-jvm</artifactId>
+            <version>${kt-schema.version}</version>
+            <optional>true</optional>
+        </dependency>
 
         <!-- Test -->
         <dependency>

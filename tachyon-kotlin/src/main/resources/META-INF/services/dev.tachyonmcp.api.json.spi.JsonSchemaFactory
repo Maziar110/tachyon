@@ -1,2 +1,3 @@
 dev.tachyonmcp.kotlin.server.json.KotlinxJsonElementFactory
 dev.tachyonmcp.kotlin.server.json.KotlinxJsonObjectFactory
+dev.tachyonmcp.kotlin.server.json.KtSchemaJsonSchemaFactory

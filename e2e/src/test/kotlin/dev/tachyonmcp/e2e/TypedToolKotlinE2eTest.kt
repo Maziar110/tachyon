@@ -10,10 +10,10 @@ import kotlinx.serialization.Serializable
 import org.junit.jupiter.api.Test
 
 /**
- * Exercises the reified `typedTool<In, Out>(...)` DSL overload, backed here by
- * [KtSchemaJsonSchemaFactory] registered via `META-INF/services`. Split out from [KotlinE2eTest]
- * because this is the only test class in the module that needs the `kt-schema-generator-json-jvm`
- * test dependency wired in.
+ * Exercises the reified `typedTool<In, Out>(...)` DSL overload, backed by `tachyon-kotlin`'s
+ * `KtSchemaJsonSchemaFactory` (registered via `META-INF/services`, requires the
+ * `kt-schema-generator-json-jvm` optional dependency this module opts into). Split out from
+ * [KotlinE2eTest] because this is the only test class in the module that needs it.
  */
 internal class TypedToolKotlinE2eTest : AbstractStatelessMcpE2eTest() {
     @Serializable

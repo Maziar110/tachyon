@@ -159,12 +159,12 @@ public class TachyonServerBuilder
 
         /**
          * Registers a tool whose input/output schemas are derived from [In]/[Out] via
-         * [dev.tachyonmcp.api.json.JsonSchema.from], keyed by [Class]. Requires a
-         * `JsonSchemaFactory<Class<?>>` registered via
-         * `META-INF/services/dev.tachyonmcp.api.json.spi.JsonSchemaFactory` on the classpath (e.g.
-         * backed by [kt-schema](https://github.com/kpavlov/kt-schema)'s
-         * `ReflectionClassJsonSchemaGenerator`); throws [IllegalStateException] at registration
-         * time if none is found — no such factory ships with `tachyon-kotlin` itself.
+         * [dev.tachyonmcp.api.json.JsonSchema.from], keyed by [Class]. Backed by
+         * `tachyon-kotlin`'s own `JsonSchemaFactory<Class<?>>`, which requires
+         * [kt-schema](https://github.com/kpavlov/kt-schema)'s `ReflectionClassJsonSchemaGenerator`
+         * on the classpath — declared as an `optional` Maven dependency, so consumers who use
+         * `typedTool` must add `kt-schema-generator-json-jvm` themselves; throws
+         * [IllegalStateException] at registration time if it's missing.
          *
          * Named `typedTool` rather than an overload of `tool` because a same-named reified
          * overload wins Kotlin's overload resolution for existing schema-less `tool(name) { }`

@@ -104,34 +104,6 @@ internal class KotlinApiTest {
         }
     }
 
-    @Serializable
-    data class ReifiedToolRequest(
-        val q: String,
-    )
-
-    @Serializable
-    data class ReifiedToolReply(
-        val a: String,
-    )
-
-    @Test
-    fun `typedTool throws when no JsonSchemaFactory-Class is registered`() {
-        // tachyon-kotlin ships no JsonSchemaFactory<Class<?>> itself (see GeneratedJsonSchema.kt) —
-        // a consumer must register one (e.g. backed by kt-schema), as e2e's
-        // KtSchemaJsonSchemaFactory does. Here, absent any registration, the failure must be clear.
-        shouldThrow<IllegalStateException> {
-            TachyonServer(
-                port = 0,
-                {
-                    name("test")
-                    typedTool<ReifiedToolRequest, ReifiedToolReply>("t4") {
-                        ToolResult.text("ok")
-                    }
-                },
-            )
-        }.message shouldContain "JsonSchemaFactory"
-    }
-
     // endregion
 
     // region: Args orNull sugar

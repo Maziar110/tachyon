@@ -69,6 +69,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -303,7 +304,16 @@ final class DefaultTachyonServer implements ServerEngine, ExtensionContext {
     @SuppressWarnings("unchecked")
     private static JsonSchemaFactory<String> discoverSchemaFactory() {
         JsonSchemaFactory<String> found = null;
-        for (var provider : ServiceLoader.load(JsonSchemaFactory.class)) {
+        // See JsonSchemas.discover() in tachyon-api: a provider backed by an optional runtime
+        // dependency (e.g. tachyon-kotlin's KtSchemaJsonSchemaFactory) may fail to load; skip it.
+        var providers = ServiceLoader.load(JsonSchemaFactory.class).iterator();
+        while (providers.hasNext()) {
+            JsonSchemaFactory<?> provider;
+            try {
+                provider = providers.next();
+            } catch (ServiceConfigurationError e) {
+                continue;
+            }
             if (provider.sourceType() == String.class) {
                 if (found != null) {
                     throw new IllegalStateException("Duplicate JsonSchemaFactory<String> implementations found: "
