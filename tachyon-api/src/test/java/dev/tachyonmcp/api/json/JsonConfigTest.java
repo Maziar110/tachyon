@@ -42,22 +42,19 @@ class JsonConfigTest {
             }
         };
         var validator = (JsonSchemaValidator) (schema, arguments) -> List.of();
-        @SuppressWarnings("unchecked")
-        var schemaFactory = (JsonSchemaFactory<String>) mock(JsonSchemaFactory.class);
+        var schemaFactory = mock(JsonSchemaFactory.class);
 
         var config = JsonConfig.builder()
                 .serializer(ser)
                 .deserializer(deser)
                 .inputSchemaValidator(validator)
                 .outputSchemaValidator(validator)
-                .schemaFactory(schemaFactory)
                 .build();
 
         assertThat(config.serializer()).isSameAs(ser);
         assertThat(config.deserializer()).isSameAs(deser);
         assertThat(config.inputValidator()).isSameAs(validator);
         assertThat(config.outputValidator()).isSameAs(validator);
-        assertThat(config.schemaFactory()).isSameAs(schemaFactory);
     }
 
     @Test

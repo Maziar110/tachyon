@@ -5,7 +5,6 @@ import dev.tachyonmcp.api.json.JsonSchemaValidator;
 import dev.tachyonmcp.api.json.PayloadDeserializer;
 import dev.tachyonmcp.api.json.PayloadSerde;
 import dev.tachyonmcp.api.json.PayloadSerializer;
-import dev.tachyonmcp.api.json.spi.JsonSchemaFactory;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -16,15 +15,13 @@ import org.jspecify.annotations.Nullable;
  * @param deserializer    payload deserializer, or {@code null} to keep the server default
  * @param inputValidator  input schema validator, or {@code null} to keep the server default
  * @param outputValidator output schema validator, or {@code null} to keep the server default
- * @param schemaFactory   parses/validates encoded JSON schemas, or {@code null} to keep the server default
  * @author Konstantin Pavlov
  */
 public record JsonConfig(
         @Nullable PayloadSerializer serializer,
         @Nullable PayloadDeserializer deserializer,
         @Nullable JsonSchemaValidator inputValidator,
-        @Nullable JsonSchemaValidator outputValidator,
-        @Nullable JsonSchemaFactory<String> schemaFactory) {
+        @Nullable JsonSchemaValidator outputValidator) {
 
     public static Builder builder() {
         return new Builder();
@@ -38,7 +35,6 @@ public record JsonConfig(
         private @Nullable PayloadDeserializer deserializer;
         private @Nullable JsonSchemaValidator inputValidator;
         private @Nullable JsonSchemaValidator outputValidator;
-        private @Nullable JsonSchemaFactory<String> schemaFactory;
 
         private Builder() {}
 
@@ -73,13 +69,8 @@ public record JsonConfig(
             return this;
         }
 
-        public Builder schemaFactory(@Nullable JsonSchemaFactory<String> schemaFactory) {
-            this.schemaFactory = schemaFactory;
-            return this;
-        }
-
         public JsonConfig build() {
-            return new JsonConfig(serializer, deserializer, inputValidator, outputValidator, schemaFactory);
+            return new JsonConfig(serializer, deserializer, inputValidator, outputValidator);
         }
     }
 }

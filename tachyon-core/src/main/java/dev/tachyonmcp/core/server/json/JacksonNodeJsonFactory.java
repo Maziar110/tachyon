@@ -5,12 +5,13 @@ import dev.tachyonmcp.api.json.JsonDocument;
 import dev.tachyonmcp.api.json.JsonSchema;
 import dev.tachyonmcp.api.json.spi.JsonDocumentFactory;
 import dev.tachyonmcp.api.json.spi.JsonSchemaFactory;
+import java.util.Optional;
 import tools.jackson.databind.JsonNode;
 
 /**
  * Jackson {@link JsonNode}-backed {@link JsonDocumentFactory} and {@link JsonSchemaFactory}: wraps
- * an already-parsed tree without re-serializing it, retaining the node for {@link
- * JsonDocument#unwrap(Class)} instead of round-tripping through a JSON string.
+ * an already-parsed tree without re-serializing it, retaining the node for
+ * {@link JsonDocument#unwrap(Class)} instead of round-tripping through a JSON string.
  *
  * @author Konstantin Pavlov
  */
@@ -31,7 +32,7 @@ public final class JacksonNodeJsonFactory implements JsonDocumentFactory<JsonNod
     }
 
     @Override
-    public JsonSchema toJsonSchema(JsonNode node) {
-        return new JacksonNodeJsonSchema(node);
+    public Optional<JsonSchema> toJsonSchema(JsonNode source) {
+        return Optional.of(new JacksonNodeJsonSchema(source));
     }
 }

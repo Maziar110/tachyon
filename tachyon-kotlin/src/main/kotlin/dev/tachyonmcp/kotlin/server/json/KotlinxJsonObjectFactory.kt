@@ -9,10 +9,9 @@ import kotlinx.serialization.json.JsonObject
 import java.util.Optional
 
 /**
- * kotlinx.serialization [JsonObject]-backed [dev.tachyonmcp.api.json.spi.JsonDocumentFactory]
- * and [dev.tachyonmcp.api.json.spi.JsonSchemaFactory]: wraps
- * an already-built object without re-serializing it, retaining it for [JsonDocument.unwrap]
- * instead of round-tripping through a JSON string.
+ * kotlinx.serialization [JsonObject]-backed [dev.tachyonmcp.api.json.spi.JsonDocumentFactory] and
+ * [JsonSchemaFactory]: wraps an already-built object without re-serializing it, retaining it for
+ * [dev.tachyonmcp.api.json.JsonDocument.unwrap] instead of round-tripping through a JSON string.
  */
 internal class KotlinxJsonObjectFactory :
     JsonDocumentFactory<JsonObject>,
@@ -31,7 +30,8 @@ internal class KotlinxJsonObjectFactory :
     override fun toJsonDocument(source: JsonObject): JsonDocument =
         KotlinxJsonObjectDocument(source)
 
-    override fun toJsonSchema(source: JsonObject): JsonSchema = KotlinxJsonObjectSchema(source)
+    override fun toJsonSchema(source: JsonObject): Optional<JsonSchema> =
+        Optional.of(KotlinxJsonObjectSchema(source))
 }
 
 private class KotlinxJsonObjectDocument(

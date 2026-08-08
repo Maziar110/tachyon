@@ -6,6 +6,7 @@ import dev.tachyonmcp.api.json.JsonObject;
 import dev.tachyonmcp.api.json.JsonSchema;
 import dev.tachyonmcp.api.json.spi.JsonDocumentFactory;
 import dev.tachyonmcp.api.json.spi.JsonSchemaFactory;
+import java.util.Optional;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
@@ -34,7 +35,7 @@ public final class JacksonObjectJsonFactory implements JsonDocumentFactory<Objec
     }
 
     @Override
-    public JsonSchema toJsonSchema(ObjectNode node) {
-        return new JacksonObjectJsonSchema(node);
+    public Optional<JsonSchema> toJsonSchema(ObjectNode source) {
+        return Optional.of(new JacksonObjectJsonSchema(source));
     }
 }

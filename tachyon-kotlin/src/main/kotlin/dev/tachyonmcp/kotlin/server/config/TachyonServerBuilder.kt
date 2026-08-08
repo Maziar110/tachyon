@@ -22,7 +22,6 @@ import dev.tachyonmcp.kotlin.server.DefaultKotlinTachyonServer
 import dev.tachyonmcp.kotlin.server.TachyonDsl
 import dev.tachyonmcp.kotlin.server.TachyonServer
 import dev.tachyonmcp.kotlin.server.features.CoroutineRuntime
-import dev.tachyonmcp.kotlin.server.json.generatedJsonSchema
 import dev.tachyonmcp.kotlin.server.json.toJsonSchema
 import dev.tachyonmcp.kotlin.server.json.toJsonSchemaOrNull
 import io.netty.channel.ChannelPipeline
@@ -138,6 +137,16 @@ public class TachyonServerBuilder
             }
 
         @JvmSynthetic
+        @Suppress("MaxLineLength")
+        @Deprecated(
+            level = DeprecationLevel.WARNING,
+            message = "Use tool(...) with explicit JsonSchema object",
+            replaceWith =
+                ReplaceWith(
+                    "tool(name, description, JsonSchema.parse(inputSchema), outputSchema?.let(JsonSchema::parse), taskSupport, handler)",
+                    "dev.tachyonmcp.api.json.JsonSchema",
+                ),
+        )
         public fun tool(
             name: String,
             description: String? = null,
@@ -158,13 +167,18 @@ public class TachyonServerBuilder
             }
 
         /**
-         * Registers a tool whose input/output schemas are derived from [In]/[Out] via
-         * [dev.tachyonmcp.api.json.JsonSchema.from], keyed by [Class]. Resolved by a
-         * `JsonSchemaFactory<Class<?>>` shipped in the `tachyon-kotlin-kt-schema` integration
-         * artifact, backed by
-         * [kt-schema](https://github.com/kpavlov/kt-schema)'s `ReflectionClassJsonSchemaGenerator`.
-         * Add that artifact to the classpath to use `typedTool`; throws [IllegalStateException]
-         * at registration time if it's missing.
+         * Registers a tool whose input/output schemas are resolved from [In]/[Out] via
+         * [dev.tachyonmcp.api.json.JsonSchema.generated], which tries the service-loaded
+         * [dev.tachyonmcp.api.json.spi.JsonSchemaFactory] chain in ascending priority order: a
+         * build-time codegen resource (tachyon-core's `KtSchemaResourceFactory`) wins when
+         * present, otherwise the runtime reflection generator in the `tachyon-kotlin-kt-schema`
+         * integration artifact (its `KtSchemaReflectionFactory`, registered via
+         * `META-INF/services`) back-fills. Add that artifact to the classpath to use `typedTool`
+         * without a codegen resource. To use a different generator, register your own
+         * `JsonSchemaFactory<Class<?>>` via `META-INF/services` — `json { schemaFactory = ... }`
+         * configures the unrelated *validation* factory (`sourceType() == String`) and has no
+         * effect here. Throws [IllegalStateException] at registration time if no factory in the
+         * chain produces a schema.
          *
          * Named `typedTool` rather than an overload of `tool` because a same-named reified
          * overload wins Kotlin's overload resolution for existing schema-less `tool(name) { }`
@@ -178,14 +192,34 @@ public class TachyonServerBuilder
             taskSupport: TaskSupport? = null,
             noinline handler: suspend ToolScope.() -> ToolResult,
         ): TachyonServerBuilder =
-            tool(
+            typedToolFor(
+                inputType = In::class.java,
+                outputType = Out::class.java,
                 name = name,
                 description = description,
-                inputSchema = generatedJsonSchema<In>(),
-                outputSchema = generatedJsonSchema<Out>(),
                 taskSupport = taskSupport,
                 handler = handler,
             )
+
+        @PublishedApi
+        internal fun typedToolFor(
+            inputType: Class<*>,
+            outputType: Class<*>,
+            name: String,
+            description: String?,
+            taskSupport: TaskSupport?,
+            handler: suspend ToolScope.() -> ToolResult,
+        ): TachyonServerBuilder =
+            this.also {
+                featureRegistrar.tool(
+                    name,
+                    description,
+                    JsonSchema.generated(inputType),
+                    JsonSchema.generated(outputType),
+                    taskSupport,
+                    handler,
+                )
+            }
 
         /**
          * Registers a prebuilt tool descriptor with a suspending handler block.
@@ -394,7 +428,7 @@ public class TachyonServerBuilder
         public fun extensions(vararg extensions: ServerExtension): TachyonServerBuilder =
             this.also { delegate.withExtensions(*extensions) }
 
-        /** Configures the JSON payload boundary: serde and input/output schema validators. */
+        /** Configures the JSON payload boundary: serde, schema factory, and validators. */
         @OptIn(ExperimentalContracts::class)
         public inline fun json(
             crossinline configure: (@TachyonDsl JsonScope).() -> Unit,

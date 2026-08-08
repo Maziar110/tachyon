@@ -35,7 +35,7 @@ public class DefaultToolRegistry extends AbstractRegistry<ToolDescriptor, ToolHa
 
     private static final Logger logger = LoggerFactory.getLogger(DefaultToolRegistry.class);
 
-    private final JsonSchemaFactory<String> schemaFactory;
+    private final JsonSchemaFactory<?> schemaFactory;
     private final FeatureConfig config;
 
     /**
@@ -45,9 +45,12 @@ public class DefaultToolRegistry extends AbstractRegistry<ToolDescriptor, ToolHa
     public static final int MAX_DESCRIPTION_LENGTH = 2048;
 
     /**
-     * Creates a tool registry with the given schema validators and payload serde.
+     * Creates a tool registry.
+     *
+     * @param schemaFactory validates registered tool schemas; must accept {@link String} sources
+     * @param config        feature configuration, e.g. page size and mode
      */
-    public DefaultToolRegistry(JsonSchemaFactory<String> schemaFactory, FeatureConfig config) {
+    public DefaultToolRegistry(JsonSchemaFactory<?> schemaFactory, FeatureConfig config) {
         super(config.pageSize());
         this.schemaFactory = schemaFactory;
         this.config = config;

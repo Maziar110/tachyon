@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors.
 package dev.tachyonmcp.kotlin.server
 
+import dev.tachyonmcp.api.json.JsonSchema
 import dev.tachyonmcp.api.server.config.Mode
 import dev.tachyonmcp.api.server.domain.Role
 import dev.tachyonmcp.api.server.extensions.ExtensionContext
@@ -33,6 +34,21 @@ internal class TachyonServerTest {
     private data class JacksonPayload(
         val message: String,
     )
+
+    private class TypedInput
+
+    private class TypedOutput
+
+    @Test
+    fun `typed tool resolves schemas through the JsonSchemaFactory chain`() {
+        buildServer {
+            typedTool<TypedInput, TypedOutput>("typed") { ToolResult.text("unused") }
+        }.use { server ->
+            val descriptor = server.tools().find("typed").orElseThrow()
+            descriptor.inputSchema()?.json() shouldBe """{"type":"object","title":"TypedInput"}"""
+            descriptor.outputSchema()?.json() shouldBe """{"type":"object","title":"TypedOutput"}"""
+        }
+    }
 
     @Test
     fun `Kotlin DSL retains Jackson serde by default`() {
@@ -300,7 +316,7 @@ internal class TachyonServerTest {
         ) {
             name("template-test")
             session { enabled = true }
-            tool("check", inputSchema = schema) { ToolResult.text("ok") }
+            tool("check", inputSchema = JsonSchema.of(schema)) { ToolResult.text("ok") }
             resourceTemplate(
                 name = "user-profile",
                 uriTemplate = "user://{userId}/profile",
@@ -532,8 +548,8 @@ internal class TachyonServerTest {
             tool(
                 "with-output",
                 "Has output schema",
-                inputSchema = schema,
-                outputSchema = outputSchema,
+                inputSchema = JsonSchema.of(schema),
+                outputSchema = JsonSchema.of(outputSchema),
             ) {
                 ToolResult.text("done")
             }
@@ -555,7 +571,7 @@ internal class TachyonServerTest {
         ) {
             name("string-schema-test")
             session { enabled = true }
-            tool("string-schema", inputSchema = schema) {
+            tool("string-schema", inputSchema = JsonSchema.of(schema)) {
                 ToolResult.text("ok")
             }
         }.use { handle ->

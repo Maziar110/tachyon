@@ -9,10 +9,9 @@ import kotlinx.serialization.json.JsonElement
 import java.util.Optional
 
 /**
- * kotlinx.serialization [JsonElement]-backed
- * [dev.tachyonmcp.api.json.spi.JsonDocumentFactory] and [JsonSchemaFactory]: wraps
- * an already-parsed tree without re-serializing it, retaining the element for
- * [dev.tachyonmcp.api.json.JsonDocument.unwrap] instead of round-tripping through a JSON string.
+ * kotlinx.serialization [JsonElement]-backed [dev.tachyonmcp.api.json.spi.JsonDocumentFactory] and
+ * [JsonSchemaFactory]: wraps an already-parsed tree without re-serializing it, retaining the element
+ * for [dev.tachyonmcp.api.json.JsonDocument.unwrap] instead of round-tripping through a JSON string.
  */
 internal class KotlinxJsonElementFactory :
     JsonDocumentFactory<JsonElement>,
@@ -31,7 +30,8 @@ internal class KotlinxJsonElementFactory :
     override fun toJsonDocument(source: JsonElement): JsonDocument =
         KotlinxJsonElementDocument(source)
 
-    override fun toJsonSchema(source: JsonElement): JsonSchema = KotlinxJsonElementSchema(source)
+    override fun toJsonSchema(source: JsonElement): Optional<JsonSchema> =
+        Optional.of(KotlinxJsonElementSchema(source))
 }
 
 private class KotlinxJsonElementDocument(

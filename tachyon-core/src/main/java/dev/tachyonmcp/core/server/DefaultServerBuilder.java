@@ -51,7 +51,7 @@ final class DefaultServerBuilder implements ServerBuilder {
     private JsonSchemaValidator outputSchemaValidator = new NetworkntJsonSchemaValidator();
     private PayloadSerializer payloadSerializer = new JacksonPayloadSerde();
     private PayloadDeserializer payloadDeserializer = new JacksonPayloadSerde();
-    private @Nullable JsonSchemaFactory<String> schemaFactory;
+    private @Nullable JsonSchemaFactory<?> schemaFactory;
 
     @Nullable
     private Consumer<ChannelPipeline> pipelineCustomizer;
@@ -136,9 +136,6 @@ final class DefaultServerBuilder implements ServerBuilder {
         }
         if (config.outputValidator() != null) {
             outputSchemaValidator = config.outputValidator();
-        }
-        if (config.schemaFactory() != null) {
-            schemaFactory = config.schemaFactory();
         }
         return this;
     }

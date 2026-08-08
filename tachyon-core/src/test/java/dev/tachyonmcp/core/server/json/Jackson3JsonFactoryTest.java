@@ -33,7 +33,7 @@ class Jackson3JsonFactoryTest {
 
     @Test
     void shouldWrapValidJsonStringAsSchema() {
-        var schema = factory.toJsonSchema("{\"type\":\"object\"}");
+        var schema = factory.toJsonSchema("{\"type\":\"object\"}").orElseThrow();
         assertThatJson(schema.json()).isEqualTo("{\"type\":\"object\"}");
     }
 

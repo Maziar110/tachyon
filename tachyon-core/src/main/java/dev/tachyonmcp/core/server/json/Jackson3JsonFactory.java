@@ -6,6 +6,7 @@ import dev.tachyonmcp.api.json.JsonObject;
 import dev.tachyonmcp.api.json.JsonSchema;
 import dev.tachyonmcp.api.json.spi.JsonDocumentFactory;
 import dev.tachyonmcp.api.json.spi.JsonSchemaFactory;
+import java.util.Optional;
 
 /**
  * Jackson 3-backed {@link JsonDocumentFactory} and {@link JsonSchemaFactory} for {@link String}
@@ -15,9 +16,9 @@ import dev.tachyonmcp.api.json.spi.JsonSchemaFactory;
  * through its public no-arg constructor, not {@link #INSTANCE} — the module isn't an explicit
  * module, so {@code ServiceLoader} never looks for a {@code provider()} factory method). For
  * already-parsed Jackson {@code JsonNode} trees or tachyon's provider-neutral {@link JsonObject},
- * see {@link JacksonNodeJsonFactory} and {@link JacksonObjectJsonFactory} — a single class can't
- * implement {@code JsonSchemaFactory<String>} and {@code JsonSchemaFactory<JsonNode>} at once, since
- * Java forbids implementing the same generic interface twice with different type arguments.
+ * see {@link JacksonNodeJsonFactory} and {@link JacksonObjectJsonFactory}. Each {@link
+ * JsonSchemaFactory} declares its supported representation through {@link
+ * JsonSchemaFactory#sourceType()}.
  *
  * @author Konstantin Pavlov
  */
@@ -39,9 +40,9 @@ public final class Jackson3JsonFactory implements JsonDocumentFactory<String>, J
     }
 
     @Override
-    public JsonSchema toJsonSchema(String json) {
+    public Optional<JsonSchema> toJsonSchema(String json) {
         validate(json);
-        return JsonSchema.of(json);
+        return Optional.of(JsonSchema.of(json));
     }
 
     private static void validate(String json) {

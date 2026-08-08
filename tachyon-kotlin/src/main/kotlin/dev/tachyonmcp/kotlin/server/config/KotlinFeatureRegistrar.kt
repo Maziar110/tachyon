@@ -129,7 +129,7 @@ internal class KotlinFeatureRegistrar(
     fun tool(
         name: String,
         description: String?,
-        inputSchema: String,
+        inputSchema: String?,
         outputSchema: String?,
         taskSupport: TaskSupport?,
         handler: suspend ToolScope.() -> ToolResult,

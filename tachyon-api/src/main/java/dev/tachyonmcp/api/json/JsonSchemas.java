@@ -2,8 +2,9 @@
 package dev.tachyonmcp.api.json;
 
 import dev.tachyonmcp.api.json.spi.JsonSchemaFactory;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.ServiceLoader;
 
 final class JsonSchemas {
@@ -11,35 +12,50 @@ final class JsonSchemas {
     private JsonSchemas() {}
 
     static <T> JsonSchema from(T source, Class<T> type) {
-        return factoryFor(type).toJsonSchema(source);
+        for (JsonSchemaFactory<?> factory : Holder.FACTORIES) {
+            if (factory.sourceType() != type) {
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            var schema = ((JsonSchemaFactory<T>) factory).toJsonSchema(source);
+            if (schema.isPresent()) {
+                return schema.get();
+            }
+        }
+        throw new IllegalStateException("No JsonSchemaFactory registered for " + type.getName()
+                + " sources via META-INF/services/"
+                + JsonSchemaFactory.class.getName() + ".");
     }
 
-    @SuppressWarnings("unchecked")
-    private static <T> JsonSchemaFactory<T> factoryFor(Class<T> type) {
-        var factory = Holder.FACTORIES.get(type);
-        if (factory == null) {
-            throw new IllegalStateException("No JsonSchemaFactory<" + type.getName()
-                    + "> implementation found on the classpath. Register one via META-INF/services/"
-                    + JsonSchemaFactory.class.getName() + ".");
+    static JsonSchema generated(Class<?> type) {
+        for (JsonSchemaFactory<?> factory : Holder.FACTORIES) {
+            if (factory.sourceType() != Class.class) {
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            var schema = ((JsonSchemaFactory<Class<?>>) factory).toJsonSchema(type);
+            if (schema.isPresent()) {
+                return schema.get();
+            }
         }
-        return (JsonSchemaFactory<T>) factory;
+        throw new IllegalStateException("No schema generated for " + type.getName()
+                + ": no JsonSchemaFactory registered in "
+                + "META-INF/services/dev.tachyonmcp.api.json.spi.JsonSchemaFactory produces one."
+                + " Check for a build-time codegen resource at "
+                + "META-INF/kt-schema/schemas/" + type.getName().replace('.', '/') + ".json"
+                + " or add a generator factory to the classpath.");
     }
 
     private static final class Holder {
-        static final Map<Class<?>, JsonSchemaFactory<?>> FACTORIES = discover();
+        static final List<JsonSchemaFactory<?>> FACTORIES = discover();
 
-        private static Map<Class<?>, JsonSchemaFactory<?>> discover() {
-            var map = new HashMap<Class<?>, JsonSchemaFactory<?>>();
+        private static List<JsonSchemaFactory<?>> discover() {
+            var factories = new ArrayList<JsonSchemaFactory<?>>();
             for (JsonSchemaFactory<?> factory : ServiceLoader.load(JsonSchemaFactory.class)) {
-                var existing = map.putIfAbsent(factory.sourceType(), factory);
-                if (existing != null) {
-                    throw new IllegalStateException("Duplicate JsonSchemaFactory<"
-                            + factory.sourceType().getName() + "> implementations found: "
-                            + existing.getClass().getName() + " and "
-                            + factory.getClass().getName());
-                }
+                factories.add(factory);
             }
-            return Map.copyOf(map);
+            factories.sort(Comparator.comparingInt(JsonSchemaFactory::priority));
+            return List.copyOf(factories);
         }
     }
 }
