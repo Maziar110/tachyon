@@ -25,6 +25,7 @@ import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.ListPromptsResult;
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.ListResourceTemplatesResult;
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.ListResourcesResult;
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.ListToolsResult;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -145,5 +146,38 @@ class McpResponseMapperTest {
         assertThat(promptResult.prompts().getFirst().icons()).hasSize(1);
         assertThat(promptResult.prompts().getFirst()._meta())
                 .containsEntry("kind", JsonNodeFactory.instance.textNode("prompt"));
+    }
+
+    @Test
+    void emptyDescriptorFieldsOmitIconsAudienceArgumentsAndSizesOnWire() {
+        var iconWithNoSizes = Icon.of("https://example.test/icon.png", "image/png", List.of(), null);
+        var annotations = Annotations.of(List.of(), 0.5, null);
+        var tool = ToolDescriptor.builder().name("bare-tool").build();
+        var resource = ResourceDescriptor.builder()
+                .name("bare-resource")
+                .uri("memory://bare")
+                .annotations(annotations)
+                .icons(iconWithNoSizes)
+                .build();
+        var prompt = PromptDescriptor.builder().name("bare-prompt").build();
+
+        var toolResult = (ListToolsResult) mapper.listToolsResult(List.of(tool), null);
+        var resourceResult = (ListResourcesResult) mapper.listResourcesResult(List.of(resource), null);
+        var promptResult = (ListPromptsResult) mapper.listPromptsResult(List.of(prompt), null);
+
+        var toolJson = new String(
+                CodecRegistry.codecFor(ListToolsResult.class).encodeToBytes(toolResult), StandardCharsets.UTF_8);
+        var resourceJson = new String(
+                CodecRegistry.codecFor(ListResourcesResult.class).encodeToBytes(resourceResult),
+                StandardCharsets.UTF_8);
+        var promptJson = new String(
+                CodecRegistry.codecFor(ListPromptsResult.class).encodeToBytes(promptResult), StandardCharsets.UTF_8);
+
+        assertThat(toolJson).doesNotContain("\"icons\"");
+        assertThat(resourceJson)
+                .contains("\"icons\"")
+                .doesNotContain("\"audience\"")
+                .doesNotContain("\"sizes\"");
+        assertThat(promptJson).doesNotContain("\"arguments\"");
     }
 }

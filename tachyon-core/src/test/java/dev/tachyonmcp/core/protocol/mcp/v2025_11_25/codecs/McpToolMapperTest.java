@@ -227,13 +227,28 @@ class McpToolMapperTest {
     }
 
     @Test
-    void toDomainIconsReturnsNullForNullInput() {
-        assertThat(McpToolMapper.toDomainIcons(null)).isNull();
+    void toDomainIconsReturnsEmptyForNullInput() {
+        assertThat(McpToolMapper.toDomainIcons(null)).isEmpty();
     }
 
     @Test
-    void toProtocolIconsReturnsNullForNullInput() {
-        assertThat(McpToolMapper.toProtocolIcons(null)).isNull();
+    void toProtocolIconsReturnsNullForEmptyInput() {
+        assertThat(McpToolMapper.toProtocolIcons(List.of())).isNull();
+    }
+
+    @Test
+    void toProtocolIconsOmitsSizesWhenEmpty() {
+        var domainIcon = Icon.of("https://example.com/icon.png", "image/png", List.of(), null);
+        var protocolIcons = McpToolMapper.toProtocolIcons(List.of(domainIcon));
+        assertThat(protocolIcons.getFirst().sizes()).isNull();
+    }
+
+    @Test
+    void toDomainAnnotationsConvertsAbsentAudienceToEmptyList() {
+        var protocol = new dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.Annotations(null, 0.5, null);
+        var domain = McpToolMapper.toDomainAnnotations(protocol);
+        assertThat(domain.audience()).isEmpty();
+        assertThat(domain.priority()).isEqualTo(0.5);
     }
 
     @Test

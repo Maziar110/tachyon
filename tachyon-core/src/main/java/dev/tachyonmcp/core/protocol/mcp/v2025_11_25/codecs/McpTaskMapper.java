@@ -39,7 +39,7 @@ final class McpTaskMapper {
                 entry.statusMessage(),
                 entry.createdAtIso(),
                 entry.lastUpdatedAtIso(),
-                entry.ttl(),
+                entry.ttlMillis(),
                 pollIntervalToMillis(entry.pollInterval()));
     }
 
@@ -51,7 +51,7 @@ final class McpTaskMapper {
                 entry.statusMessage(),
                 entry.createdAtIso(),
                 entry.lastUpdatedAtIso(),
-                entry.ttl(),
+                entry.ttlMillis(),
                 pollIntervalToMillis(entry.pollInterval()));
     }
 
@@ -63,7 +63,7 @@ final class McpTaskMapper {
                 entry.statusMessage(),
                 entry.createdAtIso(),
                 entry.lastUpdatedAtIso(),
-                entry.ttl(),
+                entry.ttlMillis(),
                 pollIntervalToMillis(entry.pollInterval()));
     }
 
@@ -79,7 +79,7 @@ final class McpTaskMapper {
                 entry.statusMessage(),
                 entry.createdAtIso(),
                 entry.lastUpdatedAtIso(),
-                entry.ttl(),
+                entry.ttlMillis(),
                 pollIntervalToMillis(entry.pollInterval()));
     }
 }

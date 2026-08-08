@@ -8,6 +8,7 @@ import dev.tachyonmcp.api.server.features.prompts.PromptDescriptor;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.Prompt;
 import dev.tachyonmcp.core.server.json.JsonUtils;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 final class McpPromptMapper {
 
@@ -23,9 +24,10 @@ final class McpPromptMapper {
                 ContentBlockMappers.toProtocolIcons(d.icons()));
     }
 
+    @Nullable
     static List<dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.PromptArgument> toProtocolPromptArguments(
             List<PromptArgument> domain) {
-        if (domain == null) return null;
+        if (domain.isEmpty()) return null;
         return domain.stream()
                 .map(a -> new dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.PromptArgument(
                         a.description(), a.required(), a.name(), a.title()))
