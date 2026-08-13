@@ -15,9 +15,9 @@
   />
 </div>
 
-**Tachyon MCP** is a Java 21+ and Kotlin [Model Context Protocol](https://modelcontextprotocol.io) (MCP) SDK built
-with [Netty](https://netty.io). It implements **MCP 2025-11-25** and **MCP 2026-07-28** over Streamable HTTP and runs
-stateless by default. **It passes all official conformance tests for both protocol versions!**
+**Tachyon MCP** is a production [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server runtime for Java.
+
+Runs on Java 21+ with [Netty](https://netty.io), virtual threads, Kotlin API. No framework required. Implements **MCP 2025-11-25** and **MCP 2026-07-28** over Streamable HTTP and runs stateless by default. **It passes all official conformance tests for both protocol versions!**
 
 ## 💫 Why Tachyon?
 
