@@ -23,7 +23,9 @@ import dev.tachyonmcp.core.server.session.InMemorySessionEventStore;
 import dev.tachyonmcp.core.server.session.InMemorySessionStore;
 import io.netty.channel.ChannelPipeline;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -42,6 +44,7 @@ final class DefaultServerBuilder implements ServerBuilder {
     private final RuntimeConfig.Builder runtimeBuilder = RuntimeConfig.builder();
     private final MonitoringConfig.Builder monitoringBuilder = MonitoringConfig.builder();
     private final List<ServerExtension> extensions = new ArrayList<>();
+    private final Set<String> extensionIds = new HashSet<>();
     private final List<Consumer<TachyonServer>> bootstrapRegistrations = new ArrayList<>();
 
     private JsonSchemaValidator inputSchemaValidator = new NetworkntJsonSchemaValidator();
@@ -222,14 +225,24 @@ final class DefaultServerBuilder implements ServerBuilder {
     @Override
     @Deprecated
     public ServerBuilder extension(ServerExtension extension) {
-        this.extensions.add(extension);
+        addExtension(extension);
         return this;
     }
 
     @Override
     public ServerBuilder withExtensions(ServerExtension... extensions) {
-        this.extensions.addAll(List.of(extensions));
+        for (var extension : extensions) {
+            addExtension(extension);
+        }
         return this;
+    }
+
+    private void addExtension(ServerExtension extension) {
+        if (!extensionIds.add(extension.extensionId())) {
+            throw new IllegalArgumentException("Duplicate extension ID: " + extension.extensionId());
+        }
+
+        extensions.add(extension);
     }
 
     /**

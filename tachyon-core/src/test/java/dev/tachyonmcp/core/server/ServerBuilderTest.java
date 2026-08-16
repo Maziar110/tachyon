@@ -2,11 +2,13 @@
 package dev.tachyonmcp.core.server;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 import dev.tachyonmcp.api.server.domain.PromptMessage;
 import dev.tachyonmcp.api.server.domain.TextResourceContents;
 import dev.tachyonmcp.api.server.domain.UriTemplateValue;
+import dev.tachyonmcp.api.server.extensions.ServerExtension;
 import dev.tachyonmcp.api.server.features.completions.AsyncCompletionFn;
 import dev.tachyonmcp.api.server.features.completions.CompletionFn;
 import dev.tachyonmcp.api.server.features.completions.CompletionResult;
@@ -189,6 +191,31 @@ class ServerBuilderTest {
     void portThrowsBeforeStart() {
         try (var server = TachyonServer.builder().build()) {
             assertThatIllegalStateException().isThrownBy(server::port);
+        }
+    }
+
+    @Test
+    void rejectsDuplicateExtensionIds() {
+        var extension1 = new TestExtension("duplicate");
+        var extension2 = new TestExtension("duplicate");
+
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> TachyonServer.builder()
+                        .withExtensions(extension1, extension2)
+                        .build())
+                .withMessageContaining("Duplicate extension ID: duplicate");
+    }
+
+    private static class TestExtension implements ServerExtension {
+        private final String id;
+
+        TestExtension(String id) {
+            this.id = id;
+        }
+
+        @Override
+        public String extensionId() {
+            return id;
         }
     }
 }
