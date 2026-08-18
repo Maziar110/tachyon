@@ -4,6 +4,7 @@ package dev.tachyonmcp.e2e;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.tachyonmcp.api.server.extensions.AdvertiseMode;
 import dev.tachyonmcp.api.server.extensions.ExtensionContext;
 import dev.tachyonmcp.api.server.extensions.ExtensionSettings;
 import dev.tachyonmcp.api.server.extensions.ServerExtension;
@@ -21,10 +22,11 @@ import tools.jackson.databind.node.JsonNodeFactory;
 class ExtensionsTest extends AbstractStatefulMcpE2eTest {
 
     private static final String TEST_EXT_ID = "com.example/test";
+    private static final String INTERNAL_EXT_ID = "com.example/internal";
 
     @Test
     void serverAdvertisesExtensionInCapabilities() throws Exception {
-        startServer(it -> it.extension(new TestExtension()));
+        startServer(it -> it.withExtensions(new TestExtension()));
 
         try (var client = createTestClient()) {
             // Send initialize with matching extension
@@ -40,21 +42,72 @@ class ExtensionsTest extends AbstractStatefulMcpE2eTest {
     }
 
     @Test
-    void extensionNotAdvertisedWhenClientDoesNotDeclare() throws Exception {
-        startServer(it -> it.extension(new TestExtension()));
+    void extensionAdvertisedWhenClientDoesNotDeclare() throws Exception {
+        startServer(it -> it.withExtensions(new TestExtension()));
 
         try (var client = createTestClient()) {
             var initBody = buildInitializeJson(Map.of());
             var response = client.post(null, initBody);
             assertThatJson(response.body())
-                    .node("result.capabilities.extensions")
-                    .isAbsent();
+                    .when(Option.IGNORING_EXTRA_FIELDS)
+                    // language=JSON
+                    .isEqualTo("""
+                            {
+                              "result": {
+                                "capabilities": {
+                                  "extensions": {"com.example/test": {"version": "1.0"}}
+                                }
+                              }
+                            }
+                            """);
+        }
+    }
+
+    @Test
+    void extensionNotAdvertisedWhenAdvertiseModeIsNever() throws Exception {
+        startServer(it -> it.withExtensions(new TestExtension(), new NeverAdvertisedTestExtension()));
+
+        try (var client = createTestClient()) {
+            var initBody = buildInitializeJson(Map.of());
+            var response = client.post(null, initBody);
+            assertThatJson(response.body())
+                    .inPath("$.result.capabilities.extensions")
+                    // language=JSON
+                    .isEqualTo("""
+                    {"com.example/test": {"version": "1.0"}}
+                    """);
+        }
+    }
+
+    @Test
+    void neverAdvertisedExtensionMethodStillWorksWhenNegotiated() throws Exception {
+        startServer(it -> it.withExtensions(new NeverAdvertisedTestExtension()));
+
+        try (var client = createTestClient()) {
+            var initBody = buildInitializeJson(Map.of(INTERNAL_EXT_ID, JsonNodeFactory.instance.objectNode()));
+            var response = client.post(null, initBody);
+            var sessionId = response.headers().firstValue("MCP-Session-Id").orElseThrow();
+            client.sendInitialized(sessionId);
+
+            // language=JSON
+            var call = """
+                {"jsonrpc":"2.0","id":2,"method":"internal/hello","params":{"_meta":{"com.example/internal":{}}}}
+                """;
+            var callResp = client.post(sessionId, call);
+            // language=JSON
+            assertThatJson(callResp.body()).isEqualTo("""
+                {
+                  "jsonrpc": "2.0",
+                  "id": 2,
+                  "result": {"message": "Hi!"}
+                }
+                """);
         }
     }
 
     @Test
     void extensionEnabledWhenClientDeclaresIt() throws Exception {
-        startServer(it -> it.extension(new TestExtension()));
+        startServer(it -> it.withExtensions(new TestExtension()));
 
         try (var client = createTestClient()) {
             var initBody = buildInitializeJson(Map.of(TEST_EXT_ID, JsonNodeFactory.instance.objectNode()));
@@ -70,7 +123,7 @@ class ExtensionsTest extends AbstractStatefulMcpE2eTest {
 
     @Test
     void extensionMethodRequiresMetaEnvelope() throws Exception {
-        startServer(it -> it.extension(new TestExtension()));
+        startServer(it -> it.withExtensions(new TestExtension()));
 
         try (var client = createTestClient()) {
             var initBody = buildInitializeJson(Map.of(TEST_EXT_ID, JsonNodeFactory.instance.objectNode()));
@@ -105,7 +158,7 @@ class ExtensionsTest extends AbstractStatefulMcpE2eTest {
 
     @Test
     void extensionToolInvisibleWhenNotNegotiated() throws Exception {
-        startServer(it -> it.extension(new TestExtensionWithTool()));
+        startServer(it -> it.withExtensions(new TestExtensionWithTool()));
 
         try (var client = createTestClient()) {
             var response = client.post(null, buildInitializeJson(Map.of()));
@@ -135,7 +188,7 @@ class ExtensionsTest extends AbstractStatefulMcpE2eTest {
 
     @Test
     void extensionToolVisibleAndCallableWhenNegotiated() throws Exception {
-        startServer(it -> it.extension(new TestExtensionWithTool()));
+        startServer(it -> it.withExtensions(new TestExtensionWithTool()));
 
         try (var client = createTestClient()) {
             var response =
@@ -198,6 +251,11 @@ class ExtensionsTest extends AbstractStatefulMcpE2eTest {
         }
 
         @Override
+        public AdvertiseMode advertiseMode() {
+            return AdvertiseMode.ALWAYS;
+        }
+
+        @Override
         public Set<String> methods() {
             return Set.of("test/ext-call");
         }
@@ -213,11 +271,39 @@ class ExtensionsTest extends AbstractStatefulMcpE2eTest {
         }
     }
 
+    private static class NeverAdvertisedTestExtension implements ServerExtension {
+
+        @Override
+        public String extensionId() {
+            return INTERNAL_EXT_ID;
+        }
+
+        @Override
+        public AdvertiseMode advertiseMode() {
+            return AdvertiseMode.NEVER;
+        }
+
+        @Override
+        public Set<String> methods() {
+            return Set.of("internal/hello");
+        }
+
+        @Override
+        public void bootstrap(ExtensionContext context) {
+            context.registerHandler("internal/hello", (interaction, params) -> Map.of("message", "Hi!"));
+        }
+    }
+
     private static class TestExtensionWithTool implements ServerExtension {
 
         @Override
         public String extensionId() {
             return TEST_EXT_ID;
+        }
+
+        @Override
+        public AdvertiseMode advertiseMode() {
+            return AdvertiseMode.ALWAYS;
         }
 
         @Override
