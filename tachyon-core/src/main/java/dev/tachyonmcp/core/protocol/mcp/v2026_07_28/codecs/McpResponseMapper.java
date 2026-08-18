@@ -6,12 +6,16 @@ import dev.tachyonmcp.api.json.JsonSchema;
 import dev.tachyonmcp.api.server.config.ServerIdentity;
 import dev.tachyonmcp.api.server.domain.Annotations;
 import dev.tachyonmcp.api.server.domain.ContentBlock;
+import dev.tachyonmcp.api.server.domain.FormInputRequest;
+import dev.tachyonmcp.api.server.domain.InputRequest;
 import dev.tachyonmcp.api.server.domain.PromptMessage;
+import dev.tachyonmcp.api.server.domain.RpcMethodRequest;
 import dev.tachyonmcp.api.server.domain.ServerCapabilities;
 import dev.tachyonmcp.api.server.domain.ServerError;
 import dev.tachyonmcp.api.server.domain.TaskResult;
 import dev.tachyonmcp.api.server.domain.TextContent;
 import dev.tachyonmcp.api.server.domain.ToolAnnotations;
+import dev.tachyonmcp.api.server.domain.UrlInputRequest;
 import dev.tachyonmcp.api.server.features.completions.CompletionResult;
 import dev.tachyonmcp.api.server.features.prompts.PromptDescriptor;
 import dev.tachyonmcp.api.server.features.resources.ResourceDescriptor;
@@ -23,9 +27,14 @@ import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.BlobResourceContents;
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.CallToolResult;
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.CompleteResult;
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.DiscoverResult;
+import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.ElicitRequest;
+import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.ElicitRequestFormParams;
+import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.ElicitRequestURLParams;
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.EmptyResult;
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.GetPromptResult;
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.Implementation;
+import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.InputRequests;
+import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.InputRequiredResult;
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.ListPromptsResult;
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.ListResourceTemplatesResult;
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.ListResourcesResult;
@@ -49,6 +58,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 import tools.jackson.core.JsonEncoding;
 import tools.jackson.core.JsonGenerator;
@@ -63,6 +73,7 @@ public final class McpResponseMapper extends dev.tachyonmcp.core.protocol.mcp.v2
 
     private static final String COMPLETE = "complete";
     private static final String PUBLIC = "public";
+    private static final String INPUT_REQUIRED = "input_required";
 
     static {
         register(DiscoverResult.class, new DiscoverResultCodec());
@@ -75,6 +86,7 @@ public final class McpResponseMapper extends dev.tachyonmcp.core.protocol.mcp.v2
         register(CompleteResult.class, new CompleteResultCodec());
         register(CallToolResult.class, new CallToolResultCodec());
         register(GetPromptResult.class, new GetPromptResultCodec());
+        register(InputRequiredResult.class, new InputRequiredResultCodec());
     }
 
     @Override
@@ -180,10 +192,68 @@ public final class McpResponseMapper extends dev.tachyonmcp.core.protocol.mcp.v2
     @Override
     public Object callToolResult(ToolResult result) {
         return switch (result) {
-            case ToolResult.InputRequired ignored -> super.callToolResult(result);
+            case ToolResult.InputRequired ir ->
+                inputRequired(ir.inputRequests(), ir.requestState(), resolveMeta(result));
             case ToolResult.Error error -> buildCallToolResult(error.content(), null, true, resolveMeta(result));
             case ToolResult.Success success ->
                 buildCallToolResult(success.content(), success.structuredValue(), null, resolveMeta(result));
+        };
+    }
+
+    @Override
+    public Object inputRequiredResult(
+            Map<String, ? extends InputRequest> inputRequests,
+            @Nullable String requestState,
+            @Nullable Map<String, Object> meta) {
+        return inputRequired(inputRequests, requestState, JsonUtils.toJsonNodeMap(meta));
+    }
+
+    private static Object inputRequired(
+            @Nullable Map<String, ? extends InputRequest> inputRequests,
+            @Nullable String requestState,
+            @Nullable Map<String, JsonNode> meta) {
+        return new InputRequiredResult(encodedInputRequests(inputRequests), requestState, meta, INPUT_REQUIRED, null);
+    }
+
+    /**
+     * Encodes each domain {@link InputRequest} into a generated 2026-07-28 {@link InputRequest}
+     * payload (or, for generic RPC methods, a minimal {@code method}/{@code params} object), so the
+     * generated {@link InputRequiredResult}/{@link InputRequests} codecs can serialize the
+     * {@code input_required} response without hand-written mapping.
+     */
+    private static @Nullable InputRequests encodedInputRequests(
+            @Nullable Map<String, ? extends InputRequest> inputRequests) {
+        if (inputRequests == null) {
+            return null;
+        }
+        Map<String, JsonNode> encoded = new LinkedHashMap<>();
+        for (var entry : inputRequests.entrySet()) {
+            encoded.put(entry.getKey(), encodeInputRequest(entry.getValue()));
+        }
+        return new InputRequests(encoded);
+    }
+
+    private static JsonNode encodeInputRequest(InputRequest req) {
+        return switch (req) {
+            case RpcMethodRequest r -> {
+                var fields = new LinkedHashMap<String, Object>();
+                fields.put("method", r.method());
+                fields.put("params", Objects.requireNonNullElseGet(r.params(), Map::of));
+                yield JsonUtils.toObjectNode(fields);
+            }
+            case FormInputRequest f ->
+                encodeToTree(
+                        ElicitRequest.class,
+                        new ElicitRequest(
+                                "elicitation/create",
+                                new ElicitRequestFormParams(
+                                        null, f.message(), JsonUtils.writeString(f.requestedSchema()))));
+            case UrlInputRequest u ->
+                encodeToTree(
+                        ElicitRequest.class,
+                        // 2026-07-28 removed the `elicitationId` field; only mode/message/url are serialized.
+                        new ElicitRequest(
+                                "elicitation/create", new ElicitRequestURLParams("url", u.message(), u.url())));
         };
     }
 
