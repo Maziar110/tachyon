@@ -47,7 +47,7 @@ jobs:
 
       - name: Publish test results
         uses: mikepenz/action-junit-report@v6
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && github.event.pull_request.head.repo.fork != true }}
         with:
           report_paths: 'examples/${{ matrix.example }}/target/*-reports/TEST-*.xml'
           check_name: 'Test Report: ${{ matrix.example }} (JDK ${{ matrix.java }})'
