@@ -23,6 +23,13 @@ public interface TaskRegistry extends Tasks {
 
     void unregisterRunning(String taskId);
 
+    void registerResumer(String taskId, TaskResumer resumer);
+
+    void unregisterResumer(String taskId);
+
+    @Nullable
+    TaskResumer findResumer(String taskId);
+
     void add(TaskEntry entry);
 
     @Nullable

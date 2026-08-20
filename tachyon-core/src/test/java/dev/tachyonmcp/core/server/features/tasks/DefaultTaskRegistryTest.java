@@ -10,9 +10,9 @@ import dev.tachyonmcp.api.server.domain.FormInputRequest;
 import dev.tachyonmcp.api.server.domain.InputRequestBundle;
 import dev.tachyonmcp.api.server.domain.ServerError;
 import dev.tachyonmcp.api.server.domain.TaskResult;
-import dev.tachyonmcp.api.server.features.tasks.TaskDescriptor;
 import dev.tachyonmcp.api.server.features.tasks.TaskOptions;
 import dev.tachyonmcp.api.server.features.tasks.TaskState;
+import dev.tachyonmcp.core.protocol.Protocols;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.CallToolResult;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.CancelTaskResult;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.GetTaskResult;
@@ -58,17 +58,17 @@ class DefaultTaskRegistryTest {
 
     @Test
     void listWithZeroLimitUsesDefaultPageSize() {
-        registry.add(new TaskEntry("id-a"));
-        registry.add(new TaskEntry("id-b"));
+        registry.add(TaskEntry.builder("id-a").build());
+        registry.add(TaskEntry.builder("id-b").build());
         var result = registry.list(0, null);
         assertThat(result.items()).hasSize(2);
     }
 
     @Test
     void listWithCursorSkipsPastCursor() {
-        registry.add(new TaskEntry("id-alpha"));
-        registry.add(new TaskEntry("id-beta"));
-        registry.add(new TaskEntry("id-gamma"));
+        registry.add(TaskEntry.builder("id-alpha").build());
+        registry.add(TaskEntry.builder("id-beta").build());
+        registry.add(TaskEntry.builder("id-gamma").build());
         var result = registry.list(1, "id-alpha");
         assertThat(result.items()).hasSize(1);
         assertThat(result.items().getFirst().id()).isEqualTo("id-beta");
@@ -76,15 +76,15 @@ class DefaultTaskRegistryTest {
 
     @Test
     void listReturnsCursorWhenMoreItemsAvailable() {
-        registry.add(new TaskEntry("id-a"));
-        registry.add(new TaskEntry("id-b"));
+        registry.add(TaskEntry.builder("id-a").build());
+        registry.add(TaskEntry.builder("id-b").build());
         var result = registry.list(1, null);
         assertThat(result.nextCursor()).isEqualTo("id-a");
     }
 
     @Test
     void listReturnsNullCursorWhenAllItemsReturned() {
-        registry.add(new TaskEntry("id-a"));
+        registry.add(TaskEntry.builder("id-a").build());
         var result = registry.list(10, null);
         assertThat(result.nextCursor()).isNull();
     }
@@ -94,8 +94,8 @@ class DefaultTaskRegistryTest {
         try (var engine = newEngine(b -> {})) {
             var reg = new DefaultTaskRegistry(
                     engine, TasksConfig.builder().pageSize(1).build());
-            reg.add(new TaskEntry("id-a"));
-            reg.add(new TaskEntry("id-b"));
+            reg.add(TaskEntry.builder("id-a").build());
+            reg.add(TaskEntry.builder("id-b").build());
             var result = reg.list(0, null);
             assertThat(result.items()).hasSize(1);
             assertThat(result.nextCursor()).isEqualTo("id-a");
@@ -104,8 +104,8 @@ class DefaultTaskRegistryTest {
 
     @Test
     void listTasksReturnsRegisteredTasks() throws Exception {
-        registry.add(new TaskEntry("1"));
-        registry.add(new TaskEntry("2"));
+        registry.add(TaskEntry.builder("1").build());
+        registry.add(TaskEntry.builder("2").build());
 
         var listHandler = handlers.get("tasks/list");
         var result = (ListTasksResult) listHandler.handle(DefaultDispatchContext.noop(), null);
@@ -123,7 +123,7 @@ class DefaultTaskRegistryTest {
 
     @Test
     void getTaskReturnsResult() throws Exception {
-        registry.add(new TaskEntry("task-1"));
+        registry.add(TaskEntry.builder("task-1").build());
 
         var getHandler = handlers.get("tasks/get");
         var result = getHandler.handle(DefaultDispatchContext.noop(), Map.of("taskId", "task-1"));
@@ -142,7 +142,7 @@ class DefaultTaskRegistryTest {
 
     @Test
     void cancelTaskReturnsCancelTaskResult() throws Exception {
-        registry.add(new TaskEntry("task-1"));
+        registry.add(TaskEntry.builder("task-1").build());
 
         var cancelHandler = handlers.get("tasks/cancel");
         var result = cancelHandler.handle(DefaultDispatchContext.noop(), Map.of("taskId", "task-1"));
@@ -170,7 +170,7 @@ class DefaultTaskRegistryTest {
     @Test
     @Timeout(5)
     void taskResultBlocksUntilTaskReachesTerminalState() throws Exception {
-        registry.add(new TaskEntry("task-1"));
+        registry.add(TaskEntry.builder("task-1").build());
         var resultHandler = handlers.get("tasks/result");
 
         // SEP-1686: tasks/result MUST block a working task until it is terminal. Complete it from
@@ -195,7 +195,7 @@ class DefaultTaskRegistryTest {
 
     @Test
     void taskResultCompletedTaskReturnsPayload() throws Exception {
-        registry.add(new TaskEntry("task-1"));
+        registry.add(TaskEntry.builder("task-1").build());
         registry.completeTask("task-1", "{\"result\":\"ok\"}");
 
         var resultHandler = handlers.get("tasks/result");
@@ -273,9 +273,7 @@ class DefaultTaskRegistryTest {
     @Test
     void requireInputTransitionsToInputRequiredAndStoresPendingRequest() {
         var task = registry.create();
-        // Task has no public "start" method; resume() also legally moves SUBMITTED -> WORKING
-        // per the FSM, so it's the server-facing way to leave SUBMITTED before requireInput().
-        task.resume(null);
+        assertThat(registry.updateStatus(task.id(), TaskState.WORKING, null)).isTrue();
         var bundle = new InputRequestBundle(
                 Map.of("user_name", FormInputRequest.of("What is your name?", JsonSchema.objectSchema())),
                 "state-token");
@@ -288,14 +286,42 @@ class DefaultTaskRegistryTest {
     }
 
     @Test
+    void taskUpdateFailureMarksTaskFailedAndUnregistersResumer() throws Exception {
+        var task = (TaskEntry) registry.create();
+        assertThat(registry.updateStatus(task.id(), TaskState.WORKING, null)).isTrue();
+        task.requireInput(
+                new InputRequestBundle(
+                        Map.of("user_name", FormInputRequest.of("What is your name?", JsonSchema.objectSchema())),
+                        null),
+                null);
+        registry.registerResumer(task.id(), (context, responses, state) -> {
+            throw new IllegalStateException("boom");
+        });
+        var context = DefaultDispatchContext.create(
+                Protocols.list().stream()
+                        .filter(protocol -> protocol.versionString().equals("2026-07-28"))
+                        .findFirst()
+                        .orElseThrow(),
+                engine);
+        context.enableExtension(TasksExtension.ID);
+
+        var result = handlers.get("tasks/update")
+                .handle(context, Map.of("taskId", task.id(), "inputResponses", Map.of("user_name", "Alice")));
+
+        assertThat(result).isNotInstanceOf(ServerError.class);
+        assertThat(task.status()).isEqualTo(TaskState.FAILED);
+        assertThat(registry.findResumer(task.id())).isNull();
+    }
+
+    @Test
     void pendingInputClearsOnceTaskLeavesInputRequired() {
         var task = registry.create();
-        task.resume(null);
+        assertThat(registry.updateStatus(task.id(), TaskState.WORKING, null)).isTrue();
         var bundle = new InputRequestBundle(
                 Map.of("user_name", FormInputRequest.of("What is your name?", JsonSchema.objectSchema())), null);
         task.requireInput(bundle, null);
 
-        assertThat(task.resume(null)).isTrue();
+        assertThat(registry.updateStatus(task.id(), TaskState.WORKING, null)).isTrue();
 
         assertThat(registry.getById(task.id()).pendingInput()).isNull();
     }
@@ -314,20 +340,16 @@ class DefaultTaskRegistryTest {
 
     @Test
     void taskNotExpiredWithoutTtl() {
-        var entry = new TaskEntry("exp-1");
+        var entry = TaskEntry.builder("exp-1").build();
         assertThat(entry.isExpired()).isFalse();
     }
 
     @Test
     void taskExpiresAfterTtl() throws Exception {
-        var entry = new TaskEntry(
-                TaskDescriptor.builder().id("exp-1").build(),
-                "exp-1",
-                TaskState.WORKING,
-                Duration.ofMillis(10),
-                null,
-                null,
-                null);
+        var entry = TaskEntry.builder("exp-1")
+                .status(TaskState.WORKING)
+                .ttl(Duration.ofMillis(10))
+                .build();
         var deadline = System.currentTimeMillis() + 500;
         while (!entry.isExpired() && System.currentTimeMillis() < deadline) {
             Thread.sleep(1);
@@ -337,30 +359,20 @@ class DefaultTaskRegistryTest {
 
     @Test
     void taskResultNotExpiredBeforeKeepAliveElapses() {
-        var entry = new TaskEntry(
-                TaskDescriptor.builder().id("res-1").build(),
-                "res-1",
-                TaskState.WORKING,
-                null,
-                null,
-                null,
-                null,
-                Duration.ofMillis(200));
+        var entry = TaskEntry.builder("res-1")
+                .status(TaskState.WORKING)
+                .keepAlive(Duration.ofMillis(200))
+                .build();
         entry.complete(new TaskResult.Completed(null));
         assertThat(entry.isResultExpired()).isFalse();
     }
 
     @Test
     void taskResultExpiresAfterKeepAlive() throws Exception {
-        var entry = new TaskEntry(
-                TaskDescriptor.builder().id("res-2").build(),
-                "res-2",
-                TaskState.WORKING,
-                null,
-                null,
-                null,
-                null,
-                Duration.ofMillis(10));
+        var entry = TaskEntry.builder("res-2")
+                .status(TaskState.WORKING)
+                .keepAlive(Duration.ofMillis(10))
+                .build();
         entry.complete(new TaskResult.Completed(null));
 
         var deadline = System.currentTimeMillis() + 500;
@@ -372,15 +384,10 @@ class DefaultTaskRegistryTest {
 
     @Test
     void taskResultNeverExpiresWithZeroKeepAlive() {
-        var entry = new TaskEntry(
-                TaskDescriptor.builder().id("res-3").build(),
-                "res-3",
-                TaskState.WORKING,
-                null,
-                null,
-                null,
-                null,
-                Duration.ZERO);
+        var entry = TaskEntry.builder("res-3")
+                .status(TaskState.WORKING)
+                .keepAlive(Duration.ZERO)
+                .build();
         entry.complete(new TaskResult.Completed(null));
         assertThat(entry.isResultExpired()).isFalse();
     }
@@ -437,7 +444,7 @@ class DefaultTaskRegistryTest {
 
     @Test
     void updateStatusFromClientNotification() {
-        registry.add(new TaskEntry("task-1"));
+        registry.add(TaskEntry.builder("task-1").build());
 
         var result = registry.updateStatus("task-1", TaskState.INPUT_REQUIRED, "Need more info");
 
@@ -455,7 +462,7 @@ class DefaultTaskRegistryTest {
 
     @Test
     void updateStatusFromClientNotificationInvalidTransition() {
-        registry.add(new TaskEntry("task-1"));
+        registry.add(TaskEntry.builder("task-1").build());
         registry.completeTask("task-1", "{\"ok\":true}");
 
         var result = registry.updateStatus("task-1", TaskState.WORKING, null);
@@ -480,7 +487,7 @@ class DefaultTaskRegistryTest {
         var callCount = new AtomicInteger(0);
         registry.onChange(callCount::incrementAndGet);
 
-        registry.add(new TaskEntry("id-x"));
+        registry.add(TaskEntry.builder("id-x").build());
 
         assertThat(callCount).hasValue(1);
     }
@@ -489,7 +496,7 @@ class DefaultTaskRegistryTest {
     void shouldFireOnChangeWhenExistingTaskRemoved() {
         // Default single-arg constructor starts WORKING (non-terminal), so remove() cancels
         // it first (1 onChange) before removing it from the index (2nd onChange).
-        registry.add(new TaskEntry("id-x"));
+        registry.add(TaskEntry.builder("id-x").build());
 
         var callCount = new AtomicInteger(0);
         registry.onChange(callCount::incrementAndGet);
