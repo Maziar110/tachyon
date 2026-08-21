@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.core.server.features.tasks;
 
+import static dev.tachyonmcp.core.test.TestUtils.decodeAndHandle;
 import static dev.tachyonmcp.core.test.TestUtils.newEngine;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -13,6 +14,7 @@ import dev.tachyonmcp.api.server.domain.TaskResult;
 import dev.tachyonmcp.api.server.features.tasks.TaskOptions;
 import dev.tachyonmcp.api.server.features.tasks.TaskState;
 import dev.tachyonmcp.core.protocol.Protocols;
+import dev.tachyonmcp.core.protocol.RequestMappingException;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.CallToolResult;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.CancelTaskResult;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.GetTaskResult;
@@ -35,7 +37,7 @@ class DefaultTaskRegistryTest {
     private final ServerEngine engine = newEngine(b -> {});
     private final DefaultTaskRegistry registry =
             new DefaultTaskRegistry(engine, TasksConfig.builder().build());
-    private final HashMap<String, RpcMethodHandler> handlers = new HashMap<>();
+    private final HashMap<String, RpcMethodHandler<?, ?>> handlers = new HashMap<>();
 
     @AfterEach
     void tearDown() {
@@ -50,7 +52,7 @@ class DefaultTaskRegistryTest {
     @Test
     void listTasksReturnsEmptyList() throws Exception {
         var listHandler = handlers.get("tasks/list");
-        var result = listHandler.handle(DefaultDispatchContext.noop(), null);
+        var result = decodeAndHandle(listHandler, DefaultDispatchContext.noop(), null);
         assertThat(result).isInstanceOf(ListTasksResult.class);
         var listResult = (ListTasksResult) result;
         assertThat(listResult.tasks()).isEmpty();
@@ -108,14 +110,14 @@ class DefaultTaskRegistryTest {
         registry.add(TaskEntry.builder("2").build());
 
         var listHandler = handlers.get("tasks/list");
-        var result = (ListTasksResult) listHandler.handle(DefaultDispatchContext.noop(), null);
+        var result = (ListTasksResult) decodeAndHandle(listHandler, DefaultDispatchContext.noop(), null);
         assertThat(result.tasks()).hasSize(2);
     }
 
     @Test
     void getTaskNotFound() throws Exception {
         var getHandler = handlers.get("tasks/get");
-        var result = getHandler.handle(DefaultDispatchContext.noop(), Map.of("taskId", "nonexistent"));
+        var result = decodeAndHandle(getHandler, DefaultDispatchContext.noop(), Map.of("taskId", "nonexistent"));
         assertThat(result).isInstanceOf(ServerError.class);
         var err = (ServerError) result;
         assertThat(err.kind()).isEqualTo(ServerError.Kind.INVALID_PARAMS);
@@ -126,7 +128,7 @@ class DefaultTaskRegistryTest {
         registry.add(TaskEntry.builder("task-1").build());
 
         var getHandler = handlers.get("tasks/get");
-        var result = getHandler.handle(DefaultDispatchContext.noop(), Map.of("taskId", "task-1"));
+        var result = decodeAndHandle(getHandler, DefaultDispatchContext.noop(), Map.of("taskId", "task-1"));
         assertThat(result).isInstanceOf(GetTaskResult.class);
         var getResult = (GetTaskResult) result;
         assertThat(getResult.taskId()).isEqualTo("task-1");
@@ -134,10 +136,12 @@ class DefaultTaskRegistryTest {
     }
 
     @Test
-    void getTaskMissingId() throws Exception {
+    void getTaskMissingId() {
         var getHandler = handlers.get("tasks/get");
-        var result = getHandler.handle(DefaultDispatchContext.noop(), Map.of());
-        assertThat(result).isInstanceOf(ServerError.class);
+        assertThatThrownBy(() -> decodeAndHandle(getHandler, DefaultDispatchContext.noop(), Map.of()))
+                .isInstanceOf(RequestMappingException.class)
+                .extracting(e -> ((RequestMappingException) e).error().kind())
+                .isEqualTo(ServerError.Kind.INVALID_PARAMS);
     }
 
     @Test
@@ -145,7 +149,7 @@ class DefaultTaskRegistryTest {
         registry.add(TaskEntry.builder("task-1").build());
 
         var cancelHandler = handlers.get("tasks/cancel");
-        var result = cancelHandler.handle(DefaultDispatchContext.noop(), Map.of("taskId", "task-1"));
+        var result = decodeAndHandle(cancelHandler, DefaultDispatchContext.noop(), Map.of("taskId", "task-1"));
         assertThat(result).isInstanceOf(CancelTaskResult.class);
         var cancelResult = (CancelTaskResult) result;
         assertThat(cancelResult.taskId()).isEqualTo("task-1");
@@ -156,14 +160,14 @@ class DefaultTaskRegistryTest {
     @Test
     void cancelNonExistentTaskReturnsError() throws Exception {
         var cancelHandler = handlers.get("tasks/cancel");
-        var result = cancelHandler.handle(DefaultDispatchContext.noop(), Map.of("taskId", "nonexistent"));
+        var result = decodeAndHandle(cancelHandler, DefaultDispatchContext.noop(), Map.of("taskId", "nonexistent"));
         assertThat(result).isInstanceOf(ServerError.class);
     }
 
     @Test
     void taskResultNotFoundReturnsError() throws Exception {
         var resultHandler = handlers.get("tasks/result");
-        var result = resultHandler.handle(DefaultDispatchContext.noop(), Map.of("taskId", "task-1"));
+        var result = decodeAndHandle(resultHandler, DefaultDispatchContext.noop(), Map.of("taskId", "task-1"));
         assertThat(result).isInstanceOf(ServerError.class);
     }
 
@@ -186,7 +190,7 @@ class DefaultTaskRegistryTest {
         });
         completer.start();
 
-        var result = resultHandler.handle(DefaultDispatchContext.noop(), Map.of("taskId", "task-1"));
+        var result = decodeAndHandle(resultHandler, DefaultDispatchContext.noop(), Map.of("taskId", "task-1"));
         completer.join();
 
         assertThat(result).isInstanceOf(CallToolResult.class);
@@ -199,7 +203,7 @@ class DefaultTaskRegistryTest {
         registry.completeTask("task-1", "{\"result\":\"ok\"}");
 
         var resultHandler = handlers.get("tasks/result");
-        var result = resultHandler.handle(DefaultDispatchContext.noop(), Map.of("taskId", "task-1"));
+        var result = decodeAndHandle(resultHandler, DefaultDispatchContext.noop(), Map.of("taskId", "task-1"));
 
         assertThat(result).isInstanceOf(CallToolResult.class);
         var payload = (CallToolResult) result;
@@ -215,7 +219,7 @@ class DefaultTaskRegistryTest {
         assertThat(entry.status()).isEqualTo(TaskState.SUBMITTED);
 
         var listHandler = handlers.get("tasks/list");
-        var listResult = (ListTasksResult) listHandler.handle(DefaultDispatchContext.noop(), null);
+        var listResult = (ListTasksResult) decodeAndHandle(listHandler, DefaultDispatchContext.noop(), null);
         assertThat(listResult.tasks()).hasSize(1);
     }
 
@@ -225,7 +229,8 @@ class DefaultTaskRegistryTest {
         assertThat(entry.id()).isEqualTo("my-task-1");
 
         var getHandler = handlers.get("tasks/get");
-        var result = (GetTaskResult) getHandler.handle(DefaultDispatchContext.noop(), Map.of("taskId", "my-task-1"));
+        var result = (GetTaskResult)
+                decodeAndHandle(getHandler, DefaultDispatchContext.noop(), Map.of("taskId", "my-task-1"));
         assertThat(result.taskId()).isEqualTo("my-task-1");
     }
 
@@ -246,7 +251,8 @@ class DefaultTaskRegistryTest {
         assertThat(completed).isTrue();
 
         var getHandler = handlers.get("tasks/get");
-        var result = (GetTaskResult) getHandler.handle(DefaultDispatchContext.noop(), Map.of("taskId", entry.id()));
+        var result = (GetTaskResult)
+                decodeAndHandle(getHandler, DefaultDispatchContext.noop(), Map.of("taskId", entry.id()));
         assertThat(result.status()).isEqualTo(dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.TaskStatus.COMPLETED);
     }
 
@@ -257,7 +263,8 @@ class DefaultTaskRegistryTest {
         assertThat(failed).isTrue();
 
         var getHandler = handlers.get("tasks/get");
-        var result = (GetTaskResult) getHandler.handle(DefaultDispatchContext.noop(), Map.of("taskId", entry.id()));
+        var result = (GetTaskResult)
+                decodeAndHandle(getHandler, DefaultDispatchContext.noop(), Map.of("taskId", entry.id()));
         assertThat(result.status()).isEqualTo(dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.TaskStatus.FAILED);
     }
 
@@ -305,8 +312,10 @@ class DefaultTaskRegistryTest {
                 engine);
         context.enableExtension(TasksExtension.ID);
 
-        var result = handlers.get("tasks/update")
-                .handle(context, Map.of("taskId", task.id(), "inputResponses", Map.of("user_name", "Alice")));
+        var result = decodeAndHandle(
+                handlers.get("tasks/update"),
+                context,
+                Map.of("taskId", task.id(), "inputResponses", Map.of("user_name", "Alice")));
 
         assertThat(result).isNotInstanceOf(ServerError.class);
         assertThat(task.status()).isEqualTo(TaskState.FAILED);

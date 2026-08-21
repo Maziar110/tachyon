@@ -1,9 +1,11 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.core.server.features.prompts;
 
+import static dev.tachyonmcp.core.test.TestUtils.decodeAndHandle;
 import static dev.tachyonmcp.core.test.TestUtils.newEngine;
 import static dev.tachyonmcp.core.test.VirtualThreads.runInVirtualThread;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.tachyonmcp.api.json.JsonSchemaValidator;
 import dev.tachyonmcp.api.server.domain.Icon;
@@ -13,6 +15,7 @@ import dev.tachyonmcp.api.server.domain.ServerError;
 import dev.tachyonmcp.api.server.features.prompts.PromptDescriptor;
 import dev.tachyonmcp.api.server.features.prompts.PromptResult;
 import dev.tachyonmcp.api.server.features.prompts.Prompts;
+import dev.tachyonmcp.core.protocol.RequestMappingException;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.GetPromptResult;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.ListPromptsResult;
 import dev.tachyonmcp.core.server.RpcMethodHandler;
@@ -32,7 +35,7 @@ class DefaultPromptRegistryTest {
     private final ServerEngine server = newEngine(b -> {});
     private final DefaultPromptRegistry registry =
             new DefaultPromptRegistry(FeatureConfig.builder().build());
-    private final HashMap<String, RpcMethodHandler> handlers = new HashMap<>();
+    private final HashMap<String, RpcMethodHandler<?, ?>> handlers = new HashMap<>();
 
     private static PromptDescriptor prompt(String name) {
         return PromptDescriptor.of(name, null);
@@ -45,12 +48,12 @@ class DefaultPromptRegistryTest {
 
     private Object getPrompt(Object params) throws Exception {
         return runInVirtualThread(
-                () -> handlers.get("prompts/get").handle(DefaultDispatchContext.stateless(server), params));
+                () -> decodeAndHandle(handlers.get("prompts/get"), DefaultDispatchContext.stateless(server), params));
     }
 
     @Test
     void shouldReturnEmptyListWhenNoPromptsRegistered() throws Exception {
-        var result = handlers.get("prompts/list").handle(DefaultDispatchContext.stateless(server), null);
+        var result = decodeAndHandle(handlers.get("prompts/list"), DefaultDispatchContext.stateless(server), null);
 
         assertThat(result).isInstanceOf(ListPromptsResult.class);
         assertThat(((ListPromptsResult) result).prompts()).isEmpty();
@@ -142,10 +145,8 @@ class DefaultPromptRegistryTest {
     }
 
     @Test
-    void shouldReturnErrorWhenPromptNameMissing() throws Exception {
-        var result = getPrompt(Map.of());
-
-        assertThat(result).isInstanceOf(ServerError.class);
+    void shouldReturnErrorWhenPromptNameMissing() {
+        assertThatThrownBy(() -> getPrompt(Map.of())).isInstanceOf(RequestMappingException.class);
     }
 
     @Test
@@ -163,8 +164,8 @@ class DefaultPromptRegistryTest {
         registry.register(PromptDescriptor.of("prompt-1", "First prompt"), List.of());
         registry.register(PromptDescriptor.of("prompt-2", "Second prompt"), List.of());
 
-        var result =
-                (ListPromptsResult) handlers.get("prompts/list").handle(DefaultDispatchContext.stateless(server), null);
+        var result = (ListPromptsResult)
+                decodeAndHandle(handlers.get("prompts/list"), DefaultDispatchContext.stateless(server), null);
 
         assertThat(result.prompts()).hasSize(2);
     }
@@ -227,7 +228,7 @@ class DefaultPromptRegistryTest {
         registry.register(descriptor, List.of(PromptMessage.user("Hello")));
 
         var result = (dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.ListPromptsResult)
-                handlers.get("prompts/list").handle(DefaultDispatchContext.stateless(server), null);
+                decodeAndHandle(handlers.get("prompts/list"), DefaultDispatchContext.stateless(server), null);
         var prompt = result.prompts().getFirst();
 
         assertThat(prompt.name()).isEqualTo("full-prompt");
@@ -241,13 +242,13 @@ class DefaultPromptRegistryTest {
     }
 
     @Test
-    void shouldReturnInvalidParamsForBadArgumentsWithoutSchema() throws Exception {
+    void shouldReturnInvalidParamsForBadArgumentsWithoutSchema() {
         registry.register(PromptDescriptor.of("no-schema", "No schema prompt"), List.of(PromptMessage.user("Hi")));
 
-        var result = getPrompt(Map.of("name", "no-schema", "arguments", List.of(1, 2, 3)));
-
-        assertThat(result).isInstanceOf(ServerError.class);
-        assertThat(((ServerError) result).kind()).isEqualTo(ServerError.Kind.INVALID_PARAMS);
+        assertThatThrownBy(() -> getPrompt(Map.of("name", "no-schema", "arguments", List.of(1, 2, 3))))
+                .isInstanceOf(RequestMappingException.class)
+                .extracting(e -> ((RequestMappingException) e).error().kind())
+                .isEqualTo(ServerError.Kind.INVALID_PARAMS);
     }
 
     @Test

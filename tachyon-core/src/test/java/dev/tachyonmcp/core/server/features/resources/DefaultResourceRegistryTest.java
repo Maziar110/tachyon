@@ -1,6 +1,8 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.core.server.features.resources;
 
+import static dev.tachyonmcp.core.test.TestUtils.decodeAndHandle;
+import static dev.tachyonmcp.core.test.TestUtils.decodeAndHandleAsync;
 import static dev.tachyonmcp.core.test.TestUtils.newEngine;
 import static dev.tachyonmcp.core.test.VirtualThreads.runInVirtualThread;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -18,6 +20,7 @@ import dev.tachyonmcp.api.server.features.resources.ResourceFn;
 import dev.tachyonmcp.api.server.features.resources.ResourceTemplateDescriptor;
 import dev.tachyonmcp.api.server.features.resources.Resources;
 import dev.tachyonmcp.core.protocol.Protocols;
+import dev.tachyonmcp.core.protocol.RequestMappingException;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.EmptyResult;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.ListResourceTemplatesResult;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.ListResourcesResult;
@@ -50,7 +53,7 @@ class DefaultResourceRegistryTest {
     private final ServerEngine server = newEngine(b -> {});
     private final DefaultResourceRegistry registry =
             new DefaultResourceRegistry(server, ResourcesConfig.builder().build());
-    private final HashMap<String, RpcMethodHandler> handlers = new HashMap<>();
+    private final HashMap<String, RpcMethodHandler<?, ?>> handlers = new HashMap<>();
 
     private static ResourceDescriptor resource(String name) {
         return ResourceDescriptor.of(name, "test://" + name, null, null);
@@ -73,7 +76,7 @@ class DefaultResourceRegistryTest {
 
     @Test
     void shouldReturnEmptyListWhenNoResourcesRegistered() throws Exception {
-        var result = handlers.get("resources/list").handle(DefaultDispatchContext.stateless(server), null);
+        var result = decodeAndHandle(handlers.get("resources/list"), DefaultDispatchContext.stateless(server), null);
 
         assertThat(result).isInstanceOf(ListResourcesResult.class);
         assertThat(((ListResourcesResult) result).resources()).isEmpty();
@@ -228,8 +231,10 @@ class DefaultResourceRegistryTest {
 
         registry.unregisterByUri("test://r1");
 
-        var result = handlers.get("resources/read")
-                .handle(DefaultDispatchContext.stateless(server), Map.<String, Object>of("uri", "test://r1"));
+        var result = decodeAndHandle(
+                handlers.get("resources/read"),
+                DefaultDispatchContext.stateless(server),
+                Map.<String, Object>of("uri", "test://r1"));
         assertThat(result).isInstanceOf(ServerError.class);
         assertThat(((ServerError) result).kind()).isEqualTo(ServerError.Kind.RESOURCE_NOT_FOUND);
     }
@@ -256,25 +261,31 @@ class DefaultResourceRegistryTest {
 
     @Test
     void shouldReturnErrorWhenResourceNotFound() throws Exception {
-        var result = handlers.get("resources/read")
-                .handle(DefaultDispatchContext.stateless(server), Map.<String, Object>of("uri", "test://nonexistent"));
+        var result = decodeAndHandle(
+                handlers.get("resources/read"),
+                DefaultDispatchContext.stateless(server),
+                Map.<String, Object>of("uri", "test://nonexistent"));
 
         assertThat(result).isInstanceOf(ServerError.class);
         assertThat(((ServerError) result).kind()).isEqualTo(ServerError.Kind.RESOURCE_NOT_FOUND);
     }
 
     @Test
-    void shouldReturnErrorWhenUriMissing() throws Exception {
-        var result = handlers.get("resources/read").handle(DefaultDispatchContext.stateless(server), Map.of());
-
-        assertThat(result).isInstanceOf(ServerError.class);
+    void shouldReturnErrorWhenUriMissing() {
+        assertThatThrownBy(() -> decodeAndHandle(
+                        handlers.get("resources/read"), DefaultDispatchContext.stateless(server), Map.of()))
+                .isInstanceOf(RequestMappingException.class)
+                .extracting(e -> ((RequestMappingException) e).error().kind())
+                .isEqualTo(ServerError.Kind.INVALID_PARAMS);
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"", " ", "test://bad path", "test://bad%2", "test://bad\npath"})
     void shouldRejectInvalidReadResourceUri(String uri) throws Exception {
-        var result = handlers.get("resources/read")
-                .handle(DefaultDispatchContext.stateless(server), Map.<String, Object>of("uri", uri));
+        var result = decodeAndHandle(
+                handlers.get("resources/read"),
+                DefaultDispatchContext.stateless(server),
+                Map.<String, Object>of("uri", uri));
 
         assertThat(result).isEqualTo(new ServerError(ServerError.Kind.INVALID_PARAMS, "Invalid resource URI"));
     }
@@ -282,18 +293,18 @@ class DefaultResourceRegistryTest {
     @ParameterizedTest
     @ValueSource(strings = {"resources/subscribe", "resources/unsubscribe"})
     void shouldRejectInvalidSubscriptionUri(String method) throws Exception {
-        var result =
-                handlers.get(method).handle(DefaultDispatchContext.stateless(server), Map.of("uri", "test://bad uri"));
+        var result = decodeAndHandle(
+                handlers.get(method), DefaultDispatchContext.stateless(server), Map.of("uri", "test://bad uri"));
 
         assertThat(result).isEqualTo(new ServerError(ServerError.Kind.INVALID_PARAMS, "Invalid resource URI"));
     }
 
     @Test
     void shouldRejectOversizedResourceUri() throws Exception {
-        var result = handlers.get("resources/read")
-                .handle(
-                        DefaultDispatchContext.stateless(server),
-                        Map.<String, Object>of("uri", "test://" + "a".repeat(8_192)));
+        var result = decodeAndHandle(
+                handlers.get("resources/read"),
+                DefaultDispatchContext.stateless(server),
+                Map.<String, Object>of("uri", "test://" + "a".repeat(8_192)));
 
         assertThat(result).isEqualTo(new ServerError(ServerError.Kind.INVALID_PARAMS, "Invalid resource URI"));
     }
@@ -305,8 +316,10 @@ class DefaultResourceRegistryTest {
                     throw new InvalidArgumentException("city", "unknown city");
                 });
 
-        var result = runInVirtualThread(() -> handlers.get("resources/read")
-                .handle(DefaultDispatchContext.stateless(server), Map.<String, Object>of("uri", "test://bad-input")));
+        var result = runInVirtualThread(() -> decodeAndHandle(
+                handlers.get("resources/read"),
+                DefaultDispatchContext.stateless(server),
+                Map.<String, Object>of("uri", "test://bad-input")));
 
         assertThat(result).isInstanceOf(ServerError.class);
         assertThat(((ServerError) result).kind()).isEqualTo(ServerError.Kind.INVALID_PARAMS);
@@ -318,8 +331,10 @@ class DefaultResourceRegistryTest {
         registry.register(
                 descriptor, (ctx, request) -> TextResourceContents.of("test://resource/1", "content", "text/plain"));
 
-        var result = runInVirtualThread(() -> handlers.get("resources/read")
-                .handle(DefaultDispatchContext.stateless(server), Map.<String, Object>of("uri", "test://resource/1")));
+        var result = runInVirtualThread(() -> decodeAndHandle(
+                handlers.get("resources/read"),
+                DefaultDispatchContext.stateless(server),
+                Map.<String, Object>of("uri", "test://resource/1")));
 
         assertThat(result).isInstanceOf(ReadResourceResult.class);
         var readResult = (ReadResourceResult) result;
@@ -339,8 +354,10 @@ class DefaultResourceRegistryTest {
             return TextResourceContents.of(request.uri(), "static", "text/plain");
         });
 
-        runInVirtualThread(() -> handlers.get("resources/read")
-                .handle(DefaultDispatchContext.stateless(server), Map.of("uri", "test://static-request")));
+        runInVirtualThread(() -> decodeAndHandle(
+                handlers.get("resources/read"),
+                DefaultDispatchContext.stateless(server),
+                Map.of("uri", "test://static-request")));
 
         assertThat(capturedUri).hasValue("test://static-request");
         assertThat(capturedParams.get()).isEmpty();
@@ -364,8 +381,10 @@ class DefaultResourceRegistryTest {
                     return TextResourceContents.of(request.uri(), "template", "text/plain");
                 });
 
-        runInVirtualThread(() -> handlers.get("resources/read")
-                .handle(DefaultDispatchContext.stateless(server), Map.of("uri", "test://items/42")));
+        runInVirtualThread(() -> decodeAndHandle(
+                handlers.get("resources/read"),
+                DefaultDispatchContext.stateless(server),
+                Map.of("uri", "test://items/42")));
 
         assertThat(capturedUri).hasValue("test://items/42");
         assertThat(capturedParams.get()).containsExactly(Map.entry("id", new UriTemplateValue.Scalar("42")));
@@ -380,8 +399,10 @@ class DefaultResourceRegistryTest {
             return TextResourceContents.of(request.uri(), "sync", "text/plain");
         });
 
-        runInVirtualThread(() -> handlers.get("resources/read")
-                .handle(DefaultDispatchContext.stateless(server), Map.of("uri", "test://sync-thread")));
+        runInVirtualThread(() -> decodeAndHandle(
+                handlers.get("resources/read"),
+                DefaultDispatchContext.stateless(server),
+                Map.of("uri", "test://sync-thread")));
 
         assertThat(handlerThread.get()).isNotNull().matches(Thread::isVirtual);
     }
@@ -399,8 +420,10 @@ class DefaultResourceRegistryTest {
 
         var stage = runInVirtualThread(() -> {
             callerThread.set(Thread.currentThread());
-            return handlers.get("resources/read")
-                    .handleAsync(DefaultDispatchContext.stateless(server), Map.of("uri", "test://async-thread"));
+            return decodeAndHandleAsync(
+                    handlers.get("resources/read"),
+                    DefaultDispatchContext.stateless(server),
+                    Map.of("uri", "test://async-thread"));
         });
 
         // handleAsync() returned before the handler's future completed: the calling
@@ -418,7 +441,8 @@ class DefaultResourceRegistryTest {
 
     @Test
     void shouldReturnEmptyTemplateList() throws Exception {
-        var result = handlers.get("resources/templates/list").handle(DefaultDispatchContext.stateless(server), null);
+        var result = decodeAndHandle(
+                handlers.get("resources/templates/list"), DefaultDispatchContext.stateless(server), null);
 
         assertThat(result).isInstanceOf(ListResourceTemplatesResult.class);
         assertThat(((ListResourceTemplatesResult) result).resourceTemplates()).isEmpty();
@@ -426,8 +450,10 @@ class DefaultResourceRegistryTest {
 
     @Test
     void subscribeRejectsNullSession() throws Exception {
-        var result = handlers.get("resources/subscribe")
-                .handle(DefaultDispatchContext.stateless(server), Map.of("uri", "test://resource/1"));
+        var result = decodeAndHandle(
+                handlers.get("resources/subscribe"),
+                DefaultDispatchContext.stateless(server),
+                Map.of("uri", "test://resource/1"));
 
         assertThat(result).isInstanceOf(ServerError.class);
         assertThat(((ServerError) result).kind()).isEqualTo(ServerError.Kind.INVALID_REQUEST);
@@ -435,8 +461,10 @@ class DefaultResourceRegistryTest {
 
     @Test
     void unsubscribeRejectsNullSession() throws Exception {
-        var result = handlers.get("resources/unsubscribe")
-                .handle(DefaultDispatchContext.stateless(server), Map.of("uri", "test://resource/1"));
+        var result = decodeAndHandle(
+                handlers.get("resources/unsubscribe"),
+                DefaultDispatchContext.stateless(server),
+                Map.of("uri", "test://resource/1"));
 
         assertThat(result).isInstanceOf(ServerError.class);
         assertThat(((ServerError) result).kind()).isEqualTo(ServerError.Kind.INVALID_REQUEST);
@@ -447,8 +475,8 @@ class DefaultResourceRegistryTest {
         var session = server.createSession("test-session");
         session.activate();
 
-        var result = handlers.get("resources/subscribe")
-                .handle(context(session, server), Map.of("uri", "test://resource/1"));
+        var result = decodeAndHandle(
+                handlers.get("resources/subscribe"), context(session, server), Map.of("uri", "test://resource/1"));
 
         assertThat(result).isInstanceOf(EmptyResult.class);
         assertThat(registry.isSubscribed("test://resource/1", "test-session")).isTrue();
@@ -459,11 +487,12 @@ class DefaultResourceRegistryTest {
         var session = server.createSession("test-session");
         session.activate();
 
-        handlers.get("resources/subscribe").handle(context(session, server), Map.of("uri", "test://resource/1"));
+        decodeAndHandle(
+                handlers.get("resources/subscribe"), context(session, server), Map.of("uri", "test://resource/1"));
         assertThat(registry.isSubscribed("test://resource/1", "test-session")).isTrue();
 
-        var result = handlers.get("resources/unsubscribe")
-                .handle(context(session, server), Map.of("uri", "test://resource/1"));
+        var result = decodeAndHandle(
+                handlers.get("resources/unsubscribe"), context(session, server), Map.of("uri", "test://resource/1"));
 
         assertThat(result).isInstanceOf(EmptyResult.class);
         assertThat(registry.isSubscribed("test://resource/1", "test-session")).isFalse();
@@ -537,7 +566,7 @@ class DefaultResourceRegistryTest {
         sess.connection(conn);
         sess.activate();
 
-        handlers.get("resources/subscribe").handle(context(sess, server), Map.of("uri", "test://resource/1"));
+        decodeAndHandle(handlers.get("resources/subscribe"), context(sess, server), Map.of("uri", "test://resource/1"));
         registry.register(
                 ResourceDescriptor.of("test-resource", "test://resource/1", "Test resource", "text/plain"),
                 (ctx, request) -> TextResourceContents.of(request.uri(), "", "text/plain"));
@@ -651,13 +680,17 @@ class DefaultResourceRegistryTest {
         assertThat(callCount).hasValue(1);
 
         // old URI must no longer resolve
-        var oldUriResult = handlers.get("resources/read")
-                .handle(DefaultDispatchContext.stateless(server), Map.<String, Object>of("uri", "resource://doc-v1"));
+        var oldUriResult = decodeAndHandle(
+                handlers.get("resources/read"),
+                DefaultDispatchContext.stateless(server),
+                Map.<String, Object>of("uri", "resource://doc-v1"));
         assertThat(oldUriResult).isInstanceOf(ServerError.class);
 
         // new URI must resolve correctly
-        var newUriResult = runInVirtualThread(() -> handlers.get("resources/read")
-                .handle(DefaultDispatchContext.stateless(server), Map.<String, Object>of("uri", "resource://doc-v2")));
+        var newUriResult = runInVirtualThread(() -> decodeAndHandle(
+                handlers.get("resources/read"),
+                DefaultDispatchContext.stateless(server),
+                Map.<String, Object>of("uri", "resource://doc-v2")));
         assertThat(newUriResult).isInstanceOf(ReadResourceResult.class);
         assertThat(registry.descriptors()).hasSize(1);
     }
@@ -691,7 +724,7 @@ class DefaultResourceRegistryTest {
                 descriptor, (ctx, request) -> TextResourceContents.of(request.uri(), "content", "text/plain"));
 
         var result = (ListResourcesResult)
-                handlers.get("resources/list").handle(DefaultDispatchContext.stateless(server), null);
+                decodeAndHandle(handlers.get("resources/list"), DefaultDispatchContext.stateless(server), null);
 
         assertThat(result.resources()).hasSize(1);
         var resource = result.resources().getFirst();
@@ -783,10 +816,10 @@ class DefaultResourceRegistryTest {
                     return TextResourceContents.of(request.uri(), "ok", "text/plain");
                 });
 
-        var result = runInVirtualThread(() -> handlers.get("resources/read")
-                .handle(
-                        DefaultDispatchContext.stateless(server),
-                        Map.<String, Object>of("uri", "resource://files/one/two%20words")));
+        var result = runInVirtualThread(() -> decodeAndHandle(
+                handlers.get("resources/read"),
+                DefaultDispatchContext.stateless(server),
+                Map.<String, Object>of("uri", "resource://files/one/two%20words")));
 
         assertThat(result).isInstanceOf(ReadResourceResult.class);
         assertThat(captured.get())
@@ -815,10 +848,10 @@ class DefaultResourceRegistryTest {
                     return TextResourceContents.of(request.uri(), "specific", "text/plain");
                 });
 
-        runInVirtualThread(() -> handlers.get("resources/read")
-                .handle(
-                        DefaultDispatchContext.stateless(server),
-                        Map.<String, Object>of("uri", "resource://users/42")));
+        runInVirtualThread(() -> decodeAndHandle(
+                handlers.get("resources/read"),
+                DefaultDispatchContext.stateless(server),
+                Map.<String, Object>of("uri", "resource://users/42")));
 
         assertThat(matched).hasValue("specific");
     }
@@ -840,8 +873,8 @@ class DefaultResourceRegistryTest {
                 (ctx, request) -> TextResourceContents.of(
                         request.uri(), "content-" + scalar(request.params(), "id"), "text/plain"));
 
-        var result = (ListResourceTemplatesResult)
-                handlers.get("resources/templates/list").handle(DefaultDispatchContext.stateless(server), null);
+        var result = (ListResourceTemplatesResult) decodeAndHandle(
+                handlers.get("resources/templates/list"), DefaultDispatchContext.stateless(server), null);
 
         assertThat(result.resourceTemplates()).hasSize(1);
         var tmpl = result.resourceTemplates().getFirst();
@@ -876,13 +909,15 @@ class DefaultResourceRegistryTest {
 
         // resources/list returns size WITHOUT loading content
         var listResult = (ListResourcesResult)
-                handlers.get("resources/list").handle(DefaultDispatchContext.stateless(server), null);
+                decodeAndHandle(handlers.get("resources/list"), DefaultDispatchContext.stateless(server), null);
         assertThat(listResult.resources().getFirst().size()).isEqualTo(4096L);
         assertThat(contentLoaded).isFalse();
 
         // resources/read triggers lazy content load
-        runInVirtualThread(() -> handlers.get("resources/read")
-                .handle(DefaultDispatchContext.stateless(server), Map.of("uri", "test://sized")));
+        runInVirtualThread(() -> decodeAndHandle(
+                handlers.get("resources/read"),
+                DefaultDispatchContext.stateless(server),
+                Map.of("uri", "test://sized")));
         assertThat(contentLoaded).isTrue();
     }
 

@@ -1,6 +1,8 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.core.server.features.tools;
 
+import static dev.tachyonmcp.core.test.TestUtils.decodeAndHandle;
+import static dev.tachyonmcp.core.test.TestUtils.decodeAndHandleAsync;
 import static dev.tachyonmcp.core.test.TestUtils.newEngine;
 import static dev.tachyonmcp.core.test.TestUtils.parseJson;
 import static dev.tachyonmcp.core.test.VirtualThreads.runInVirtualThread;
@@ -22,6 +24,7 @@ import dev.tachyonmcp.api.server.features.tools.ToolRequest;
 import dev.tachyonmcp.api.server.features.tools.ToolResult;
 import dev.tachyonmcp.api.server.features.tools.Tools;
 import dev.tachyonmcp.core.protocol.Protocols;
+import dev.tachyonmcp.core.protocol.RequestMappingException;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.CallToolResult;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.ListToolsResult;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.TextContent;
@@ -62,24 +65,24 @@ class DefaultToolRegistryTest {
     private final DefaultToolRegistry registry = new DefaultToolRegistry(
             Jackson3JsonFactory.INSTANCE, FeatureConfig.builder().build());
 
-    private static void registerHandlers(DefaultToolRegistry registry, Map<String, RpcMethodHandler> handlers) {
+    private static void registerHandlers(DefaultToolRegistry registry, Map<String, RpcMethodHandler<?, ?>> handlers) {
         var validator = new NetworkntJsonSchemaValidator();
         ToolMethodHandlers.register(handlers, registry, validator, validator, TEST_SERDE, TEST_SERDE);
     }
 
     @Test
     void listToolsReturnsEmptyListWhenNoToolsRegistered() throws Exception {
-        var handlers = new HashMap<String, RpcMethodHandler>();
+        var handlers = new HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registry, handlers);
         var listHandler = handlers.get("tools/list");
-        var result = listHandler.handle(DefaultDispatchContext.noop(), null);
+        var result = decodeAndHandle(listHandler, DefaultDispatchContext.noop(), null);
         assertThat(result).isInstanceOf(ListToolsResult.class);
         assertThat(((ListToolsResult) result).tools()).isEmpty();
     }
 
     @Test
     void listTools() throws Exception {
-        var handlers = new HashMap<String, RpcMethodHandler>();
+        var handlers = new HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registry, handlers);
 
         // minimal: only name set; all optional fields absent
@@ -103,7 +106,8 @@ class DefaultToolRegistryTest {
                         .build(),
                 (context, request) -> ToolResult.text("ok"));
 
-        var listResult = (ListToolsResult) handlers.get("tools/list").handle(DefaultDispatchContext.noop(), null);
+        var listResult =
+                (ListToolsResult) decodeAndHandle(handlers.get("tools/list"), DefaultDispatchContext.noop(), null);
         assertThat(listResult.tools()).hasSize(2);
 
         var minimal = listResult.tools().stream()
@@ -124,6 +128,7 @@ class DefaultToolRegistryTest {
         assertThat(full.title()).isEqualTo("Full Tool");
         assertThat(full.description()).isEqualTo("Does everything");
         assertThat(parseJson(full.inputSchema())).isEqualTo(TEST_SCHEMA);
+        assertThat(full.outputSchema()).isNotNull();
         assertThat(parseJson(full.outputSchema())).isEqualTo(outputSchema);
         assertThat(full.execution()).isNotNull();
         assertThat(full.execution().taskSupport()).isEqualTo("optional");
@@ -136,42 +141,42 @@ class DefaultToolRegistryTest {
 
     @Test
     void callToolNotFound() throws Exception {
-        var handlers = new HashMap<String, RpcMethodHandler>();
+        var handlers = new HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registry, handlers);
 
         var callHandler = handlers.get("tools/call");
         var params = Map.<String, Object>of("name", "nonexistent");
 
-        var result = callHandler.handle(DefaultDispatchContext.noop(), params);
+        var result = decodeAndHandle(callHandler, DefaultDispatchContext.noop(), params);
         assertThat(result).isInstanceOf(ServerError.class);
         var err = (ServerError) result;
         assertThat(err.kind()).isEqualTo(ServerError.Kind.INVALID_PARAMS);
     }
 
     @Test
-    void callToolMissingName() throws Exception {
-        var handlers = new HashMap<String, RpcMethodHandler>();
+    void callToolMissingName() {
+        var handlers = new HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registry, handlers);
 
         var callHandler = handlers.get("tools/call");
 
-        var result = callHandler.handle(DefaultDispatchContext.noop(), Map.of());
-        assertThat(result).isInstanceOf(ServerError.class);
-        var err = (ServerError) result;
-        assertThat(err.kind()).isEqualTo(ServerError.Kind.INVALID_PARAMS);
+        assertThatThrownBy(() -> decodeAndHandle(callHandler, DefaultDispatchContext.noop(), Map.of()))
+                .isInstanceOf(RequestMappingException.class)
+                .extracting(e -> ((RequestMappingException) e).error().kind())
+                .isEqualTo(ServerError.Kind.INVALID_PARAMS);
     }
 
     @Test
-    void callToolWithNullParams() throws Exception {
-        var handlers = new HashMap<String, RpcMethodHandler>();
+    void callToolWithNullParams() {
+        var handlers = new HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registry, handlers);
 
         var callHandler = handlers.get("tools/call");
 
-        var result = callHandler.handle(DefaultDispatchContext.noop(), null);
-        assertThat(result).isInstanceOf(ServerError.class);
-        var err = (ServerError) result;
-        assertThat(err.kind()).isEqualTo(ServerError.Kind.INVALID_PARAMS);
+        assertThatThrownBy(() -> decodeAndHandle(callHandler, DefaultDispatchContext.noop(), null))
+                .isInstanceOf(RequestMappingException.class)
+                .extracting(e -> ((RequestMappingException) e).error().kind())
+                .isEqualTo(ServerError.Kind.INVALID_PARAMS);
     }
 
     @Test
@@ -179,7 +184,7 @@ class DefaultToolRegistryTest {
         try (ServerEngine server = newEngine(b -> {})) {
             var session = server.createSession("test");
             session.activate();
-            var handlers = new HashMap<String, RpcMethodHandler>();
+            var handlers = new HashMap<String, RpcMethodHandler<?, ?>>();
             registerHandlers(registry, handlers);
             registry.register(testTool("echo", "Echo", TEST_SCHEMA));
 
@@ -188,7 +193,7 @@ class DefaultToolRegistryTest {
 
             var ctx = DefaultDispatchContext.create(Protocols.list().getFirst(), server);
             ctx.setSession(session);
-            var result = runInVirtualThread(() -> callHandler.handle(ctx, params));
+            var result = runInVirtualThread(() -> decodeAndHandle(callHandler, ctx, params));
             assertThat(result).isInstanceOf(CallToolResult.class);
         }
     }
@@ -281,13 +286,13 @@ class DefaultToolRegistryTest {
     @ParameterizedTest
     @CsvSource({"FORBIDDEN,forbidden", "OPTIONAL,optional", "REQUIRED,required"})
     void taskSupportSerializesToWireValue(TaskSupport enumValue, String wireValue) throws Exception {
-        var handlers = new HashMap<String, RpcMethodHandler>();
+        var handlers = new HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registry, handlers);
         registry.register(
                 ToolDescriptor.builder().name("ts-tool").taskSupport(enumValue).build(),
                 (context, request) -> ToolResult.text("ok"));
 
-        var result = (ListToolsResult) handlers.get("tools/list").handle(DefaultDispatchContext.noop(), null);
+        var result = (ListToolsResult) decodeAndHandle(handlers.get("tools/list"), DefaultDispatchContext.noop(), null);
         var tool = result.tools().stream()
                 .filter(t -> "ts-tool".equals(t.name()))
                 .findFirst()
@@ -330,7 +335,7 @@ class DefaultToolRegistryTest {
 
     @Test
     void shouldMapIconsFromDescriptorToProtocolModel() throws Exception {
-        var handlers = new HashMap<String, RpcMethodHandler>();
+        var handlers = new HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registry, handlers);
         var icon = Icon.of("https://example.com/tool-icon.png", "image/png", List.of(), null);
         registry.register(
@@ -341,7 +346,8 @@ class DefaultToolRegistryTest {
                         .build(),
                 (context, request) -> ToolResult.text("ok"));
 
-        var listResult = (ListToolsResult) handlers.get("tools/list").handle(DefaultDispatchContext.noop(), null);
+        var listResult =
+                (ListToolsResult) decodeAndHandle(handlers.get("tools/list"), DefaultDispatchContext.noop(), null);
         var tool = listResult.tools().stream()
                 .filter(t -> "icon-tool".equals(t.name()))
                 .findFirst()
@@ -495,28 +501,28 @@ class DefaultToolRegistryTest {
 
     @Test
     void registerHandlersAddsBothMethods() {
-        var handlers = new java.util.HashMap<String, RpcMethodHandler>();
+        var handlers = new java.util.HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registry, handlers);
         assertThat(handlers).containsOnlyKeys("tools/list", "tools/call");
     }
 
     @Test
     void toolsListHandlerMethodName() {
-        var handlers = new java.util.HashMap<String, RpcMethodHandler>();
+        var handlers = new java.util.HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registry, handlers);
         assertThat(handlers.get("tools/list").method()).isEqualTo("tools/list");
     }
 
     @Test
     void toolsCallHandlerMethodName() {
-        var handlers = new java.util.HashMap<String, RpcMethodHandler>();
+        var handlers = new java.util.HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registry, handlers);
         assertThat(handlers.get("tools/call").method()).isEqualTo("tools/call");
     }
 
     @Test
     void asyncToolHandlerCompletesFromSeparateThread() throws Exception {
-        var handlers = new HashMap<String, RpcMethodHandler>();
+        var handlers = new HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registry, handlers);
         var executor = Executors.newSingleThreadExecutor(r -> new Thread(r, "async-tool-pool"));
         registry.registerAsync(
@@ -530,7 +536,7 @@ class DefaultToolRegistryTest {
             var ctx = DefaultDispatchContext.create(Protocols.list().getFirst(), server);
             ctx.setSession(session);
             var params = Map.of("name", "async-thread", "arguments", Map.of());
-            var stage = callHandler.handleAsync(ctx, params);
+            var stage = decodeAndHandleAsync(callHandler, ctx, params);
             var result = (CallToolResult) stage.toCompletableFuture().get(5, TimeUnit.SECONDS);
             assertThat(result.content()).isNotEmpty();
             assertThat(((TextContent) result.content().getFirst()).text()).isEqualTo("from-thread");
@@ -540,7 +546,7 @@ class DefaultToolRegistryTest {
 
     @Test
     void asyncToolHandlerInvalidArgumentExceptionMapsToInvalidRequest() throws Exception {
-        var handlers = new HashMap<String, RpcMethodHandler>();
+        var handlers = new HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registry, handlers);
         registry.registerAsync(
                 builder -> builder.name("invalid-arg-async"),
@@ -553,7 +559,7 @@ class DefaultToolRegistryTest {
             var ctx = DefaultDispatchContext.create(Protocols.list().getFirst(), server);
             ctx.setSession(session);
             var params = Map.of("name", "invalid-arg-async", "arguments", Map.of());
-            var result = runInVirtualThread(() -> callHandler.handle(ctx, params));
+            var result = runInVirtualThread(() -> decodeAndHandle(callHandler, ctx, params));
             assertThat(result).isInstanceOf(ServerError.class);
             assertThat(((ServerError) result).kind()).isEqualTo(ServerError.Kind.INVALID_PARAMS);
         }
@@ -561,7 +567,7 @@ class DefaultToolRegistryTest {
 
     @Test
     void syncToolHandlerReturnsResultThroughHandle() throws Exception {
-        var handlers = new HashMap<String, RpcMethodHandler>();
+        var handlers = new HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registry, handlers);
         registry.register(
                 configurer -> configurer.name("sync-handle").description("sync").inputSchema(TEST_SCHEMA.toString()),
@@ -577,7 +583,7 @@ class DefaultToolRegistryTest {
             var ctx = DefaultDispatchContext.create(Protocols.list().getFirst(), server);
             ctx.setSession(session);
             var params = Map.of("name", "sync-handle", "arguments", Map.of("message", "hello-sync"));
-            var result = runInVirtualThread(() -> callHandler.handle(ctx, params));
+            var result = runInVirtualThread(() -> decodeAndHandle(callHandler, ctx, params));
             assertThat(result).isInstanceOf(CallToolResult.class);
             var content = ((CallToolResult) result).content();
             assertThat(((TextContent) content.getFirst()).text()).isEqualTo("hello-sync");
@@ -586,7 +592,7 @@ class DefaultToolRegistryTest {
 
     @Test
     void syncToolHandlerExceptionMapsToInternalError() throws Exception {
-        var handlers = new HashMap<String, RpcMethodHandler>();
+        var handlers = new HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registry, handlers);
         registry.register(desc -> desc.name("sync-fail").description("sync"), (ctx, request) -> {
             throw new IllegalStateException("boom");
@@ -599,7 +605,7 @@ class DefaultToolRegistryTest {
             var ctx = DefaultDispatchContext.create(Protocols.list().getFirst(), server);
             ctx.setSession(session);
             var params = Map.of("name", "sync-fail", "arguments", Map.of());
-            var result = runInVirtualThread(() -> callHandler.handle(ctx, params));
+            var result = runInVirtualThread(() -> decodeAndHandle(callHandler, ctx, params));
             assertThat(result).isInstanceOf(ServerError.class);
             assertThat(((ServerError) result).kind()).isEqualTo(ServerError.Kind.INTERNAL_ERROR);
         }
@@ -618,7 +624,7 @@ class DefaultToolRegistryTest {
             var ctx = DefaultDispatchContext.create(Protocols.list().getFirst(), server);
             ctx.setSession(session);
             var params = Map.of("name", "sync-checked-fail", "arguments", Map.of());
-            var result = runInVirtualThread(() -> callHandler.handle(ctx, params));
+            var result = runInVirtualThread(() -> decodeAndHandle(callHandler, ctx, params));
             assertThat(result).isInstanceOf(ServerError.class);
             assertThat(((ServerError) result).kind()).isEqualTo(ServerError.Kind.INTERNAL_ERROR);
         }
@@ -723,7 +729,7 @@ class DefaultToolRegistryTest {
             """);
         var registryVal = new DefaultToolRegistry(
                 Jackson3JsonFactory.INSTANCE, FeatureConfig.builder().build());
-        var handlers = new HashMap<String, RpcMethodHandler>();
+        var handlers = new HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registryVal, handlers);
         registryVal.register(
                 ToolDescriptor.builder()
@@ -743,7 +749,7 @@ class DefaultToolRegistryTest {
             var ctx = DefaultDispatchContext.create(Protocols.list().getFirst(), server);
             ctx.setSession(session);
             var params = Map.of("name", "structured-out", "arguments", Map.of());
-            var result = runInVirtualThread(() -> callHandler.handle(ctx, params));
+            var result = runInVirtualThread(() -> decodeAndHandle(callHandler, ctx, params));
             assertThat(result).isInstanceOf(CallToolResult.class);
             // structuredContent should contain both "message" and "count"
             assertThat(((CallToolResult) result).structuredContent()).isNotNull();
@@ -755,7 +761,7 @@ class DefaultToolRegistryTest {
     void shouldConvertMixedJavaAndJsonNodeEntries() throws Exception {
         var registryVal = new DefaultToolRegistry(
                 Jackson3JsonFactory.INSTANCE, FeatureConfig.builder().build());
-        var handlers = new HashMap<String, RpcMethodHandler>();
+        var handlers = new HashMap<String, RpcMethodHandler<?, ?>>();
         registerHandlers(registryVal, handlers);
         registryVal.register(
                 ToolDescriptor.builder().name("mixed-out").description("test").build(), (context, request) -> {
@@ -772,7 +778,7 @@ class DefaultToolRegistryTest {
             var ctx = DefaultDispatchContext.create(Protocols.list().getFirst(), server);
             ctx.setSession(session);
             var params = Map.of("name", "mixed-out", "arguments", Map.of());
-            var result = runInVirtualThread(() -> callHandler.handle(ctx, params));
+            var result = runInVirtualThread(() -> decodeAndHandle(callHandler, ctx, params));
             assertThat(result).isInstanceOf(CallToolResult.class);
             assertThat(((CallToolResult) result).structuredContent()).isNotNull();
             assertThat(((CallToolResult) result).structuredContent()).containsOnlyKeys("jsonField", "plainField");

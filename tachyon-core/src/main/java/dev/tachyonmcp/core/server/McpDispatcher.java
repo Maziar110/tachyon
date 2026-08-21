@@ -36,7 +36,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
-import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -227,7 +226,7 @@ public class McpDispatcher {
         return invokeHandlerAsync(id, method, params, outboundSseStream, requestCtx, session, handler);
     }
 
-    private @Nullable RpcMethodHandler lookupHandler(String method, Object params, DispatchContext ic) {
+    private @Nullable RpcMethodHandler<?, ?> lookupHandler(String method, Object params, DispatchContext ic) {
         var owningExtensionId = server.extensionForMethod(method);
         if (owningExtensionId != null) {
             if (!ic.isExtensionEnabled(owningExtensionId)) return null;
@@ -237,29 +236,22 @@ public class McpDispatcher {
         return server.getHandler(method);
     }
 
-    private CompletableFuture<DispatchResult> invokeHandlerAsync(
+    private <I, O> CompletableFuture<DispatchResult> invokeHandlerAsync(
             RequestId id,
             String method,
-            Object params,
+            Object rawParams,
             @Nullable OutboundSseStream outboundSseStream,
             DispatchContext context,
             @Nullable Session session,
-            RpcMethodHandler handler) {
-        var paramsStr = params instanceof Map || params instanceof List
-                ? JsonRpcCodec.writeValueAsString(params)
-                : params instanceof String s ? s : null;
+            RpcMethodHandler<I, O> handler) {
+        var paramsStr = rawParams instanceof Map || rawParams instanceof List
+                ? JsonRpcCodec.writeValueAsString(rawParams)
+                : rawParams instanceof String s ? s : null;
 
         return CompletableFuture.supplyAsync(
                         () -> {
                             var startNs = System.nanoTime();
-                            var thread = Thread.currentThread();
-                            logger.debug(
-                                    "Handler start: method={}, id={}, thread={}#{} virtual={}",
-                                    method,
-                                    id,
-                                    thread.getName(),
-                                    thread.threadId(),
-                                    thread.isVirtual());
+                            logger.debug("Handler start: method={}, id={}", method, id);
 
                             if (session != null) {
                                 server.appendEvent(new SessionEvent.RequestEvent(
@@ -275,14 +267,10 @@ public class McpDispatcher {
                                             m.slowRequestThreshold().toMillis())
                                     : CompletableFuture.completedFuture(null);
                             try {
-                                CompletionStage<Object> stage = OutboundSseStreamMessageRouter.withDispatchContext(
-                                        session != null ? session.id() : null, outboundSseStream, () -> {
-                                            try {
-                                                return handler.handleAsync(context, params);
-                                            } catch (Exception e) {
-                                                return CompletableFuture.failedFuture(e);
-                                            }
-                                        });
+                                CompletionStage<O> stage = OutboundSseStreamMessageRouter.withDispatchContext(
+                                        session != null ? session.id() : null,
+                                        outboundSseStream,
+                                        () -> decodeAndHandleAsync(handler, context, rawParams));
                                 return stage.whenComplete((r, e) -> watchdog.cancel(false));
                             } catch (Exception e) {
                                 watchdog.cancel(false);
@@ -290,7 +278,7 @@ public class McpDispatcher {
                             }
                         },
                         executor)
-                .thenCompose(Function.identity())
+                .thenCompose(stage -> stage)
                 // handle(), not handleAsync(executor): encoding is a cheap ByteBuf serialize and the
                 // completing thread is never the event loop — no need to burn a VT per request on it.
                 .handle((result, ex) -> {
@@ -301,18 +289,36 @@ public class McpDispatcher {
                 });
     }
 
+    /**
+     * Fixed decode-then-handle skeleton every dispatch path shares -- the single call site each
+     * routes through, and the seam a future interceptor/chain wraps around.
+     */
+    private <I, O> CompletionStage<O> decodeAndHandleAsync(
+            RpcMethodHandler<I, O> handler, DispatchContext context, @Nullable Object rawParams) {
+        try {
+            I decoded = handler.decode(context, rawParams);
+            return handler.handleAsync(context, decoded);
+        } catch (Exception e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
     private DispatchResult handleHandlerError(RequestId id, String method, Throwable ex, DispatchContext context) {
         var unwrapped = ex instanceof CompletionException ce && ce.getCause() != null ? ce.getCause() : ex;
         if (unwrapped instanceof CancellationException) {
             logger.debug("Handler cancelled: method={}, id={}", method, id);
             return errorResult(id, ServerErrors.internalError("Internal error"), context);
         }
+        if (unwrapped instanceof RequestMappingException rme) {
+            logger.debug("Request mapping failed: method={}, id={}: {}", method, id, rme.getMessage());
+            return errorResult(id, rme.error(), context);
+        }
         logger.warn("Handler exception: method={}, id={}: {}", method, id, unwrapped.getMessage(), unwrapped);
         return errorResult(id, ServerErrors.internalError("Internal error"), context);
     }
 
-    private DispatchResult handleSuccessOrError(
-            RequestId id, String method, Object result, @Nullable String sessionId, DispatchContext context) {
+    private <O> DispatchResult handleSuccessOrError(
+            RequestId id, String method, O result, @Nullable String sessionId, DispatchContext context) {
         if (result instanceof ServerError error) {
             logger.debug("Handler error for {}: {}", method, error.message());
             return errorResult(id, error, context);
@@ -428,17 +434,16 @@ public class McpDispatcher {
                                 if (!server.isStateless()) {
                                     ic.setSession(server.createSession(generateSessionId(channelContext)));
                                 }
-                                return handler.handleAsync(ic, rawParams);
+                                return (CompletionStage<Object>) decodeAndHandleAsync(handler, ic, rawParams);
                             } catch (Exception e) {
                                 return CompletableFuture.failedFuture(e);
                             }
                         },
                         executor)
-                .thenCompose(Function.identity())
+                .thenCompose(stage -> stage)
                 .handle((result, ex) -> {
                     if (ex != null) {
-                        logger.warn("Initialize handler exception", ex);
-                        return errorResult(id, ServerErrors.internalError("Internal error"), ic);
+                        return handleHandlerError(id, "initialize", ex, ic);
                     }
                     final var session = ic.session();
                     var sessionId = session != null ? session.id() : null;
