@@ -5,6 +5,7 @@ import dev.tachyonmcp.api.annotations.ExperimentalApi
 import dev.tachyonmcp.api.json.JsonSchema
 import dev.tachyonmcp.api.server.domain.Annotations
 import dev.tachyonmcp.api.server.domain.Icon
+import dev.tachyonmcp.api.server.domain.PromptArgument
 import dev.tachyonmcp.api.server.domain.PromptMessage
 import dev.tachyonmcp.api.server.domain.ResourceContents
 import dev.tachyonmcp.api.server.domain.ToolAnnotations
@@ -133,9 +134,8 @@ public class TachyonServerBuilder
             taskSupport: TaskSupport? = null,
             annotations: ToolAnnotations? = null,
             icons: List<Icon>? = null,
-            extensionId: String? = null,
             meta: Map<String, Any>? = null,
-            handler: suspend ToolScope.() -> ToolResult,
+            block: suspend ToolScope.() -> ToolResult,
         ): TachyonServerBuilder =
             tool(
                 descriptor =
@@ -148,10 +148,9 @@ public class TachyonServerBuilder
                         taskSupport = taskSupport,
                         annotations = annotations,
                         icons = icons,
-                        extensionId = extensionId,
                         meta = meta,
                     ),
-                handler = handler,
+                block = block,
             )
 
         @JvmSynthetic
@@ -161,7 +160,7 @@ public class TachyonServerBuilder
             message = "Use tool(...) with explicit JsonSchema object",
             replaceWith =
                 ReplaceWith(
-                    "tool(name = name, description = description, inputSchema = JsonSchema.parse(inputSchema), outputSchema = outputSchema?.let(JsonSchema::parse), taskSupport = taskSupport, handler = handler)",
+                    "tool(name = name, description = description, inputSchema = JsonSchema.parse(inputSchema), outputSchema = outputSchema?.let(JsonSchema::parse), taskSupport = taskSupport, block = block)",
                     "dev.tachyonmcp.api.json.JsonSchema",
                 ),
         )
@@ -171,7 +170,7 @@ public class TachyonServerBuilder
             inputSchema: String,
             outputSchema: String? = null,
             taskSupport: TaskSupport? = null,
-            handler: suspend ToolScope.() -> ToolResult,
+            block: suspend ToolScope.() -> ToolResult,
         ): TachyonServerBuilder =
             this.also {
                 featureRegistrar.tool(
@@ -180,7 +179,7 @@ public class TachyonServerBuilder
                     inputSchema,
                     outputSchema,
                     taskSupport,
-                    handler,
+                    block,
                 )
             }
 
@@ -197,7 +196,7 @@ public class TachyonServerBuilder
          *
          * Pass [schemaGenerator] to control generation for this call only.
          *
-         * The call arguments are decoded into [In] by the configured serde, and the handler may
+         * The call arguments are decoded into [In] by the configured serde, and the block may
          * return **either** shape:
          *  - an [Out] — wrapped into a success result carrying it as `structuredContent`;
          *  - a [ToolResult] — passed through untouched, for results that also need `_meta`, a
@@ -207,7 +206,7 @@ public class TachyonServerBuilder
          * The two never collide: [ToolResult] is a sealed interface, so no [Out] can also be
          * one. A value that is neither fails with [ClassCastException] naming the expected type.
          *
-         * Both type arguments must be given explicitly — neither is inferable from the handler.
+         * Both type arguments must be given explicitly — neither is inferable from the block.
          * The name stays `typedTool` for symmetry with the rest of the build-time DSL; the
          * original reason (a reified `tool` overload hijacking schema-less `tool(name) { }`
          * calls) no longer applies, since an explicit type argument list excludes every untyped
@@ -224,9 +223,8 @@ public class TachyonServerBuilder
             noinline schemaGenerator: (Class<*>) -> JsonSchema = JsonSchema::generate,
             annotations: ToolAnnotations? = null,
             icons: List<Icon>? = null,
-            extensionId: String? = null,
             meta: Map<String, Any>? = null,
-            noinline handler: suspend ToolScope.(In) -> Any,
+            noinline block: suspend ToolScope.(In) -> Any,
         ): TachyonServerBuilder {
             val inputType = In::class.java
             val outputType = Out::class.java
@@ -240,11 +238,10 @@ public class TachyonServerBuilder
                     taskSupport = taskSupport,
                     annotations = annotations,
                     icons = icons,
-                    extensionId = extensionId,
                     meta = meta,
                 )
             return tool(descriptor) {
-                when (val produced = handler(arguments.decode(inputType))) {
+                when (val produced = block(arguments.decode(inputType))) {
                     is ToolResult -> produced
                     else -> success(outputType.cast(produced))
                 }
@@ -255,14 +252,14 @@ public class TachyonServerBuilder
          * Registers a prebuilt tool descriptor with a suspending handler block.
          *
          * @param descriptor tool descriptor
-         * @param handler handler invoked for tool calls
+         * @param block handler invoked for tool calls
          * @return this builder
          */
         @JvmSynthetic
         public fun tool(
             descriptor: ToolDescriptor,
-            handler: suspend ToolScope.() -> ToolResult,
-        ): TachyonServerBuilder = this.also { featureRegistrar.tool(descriptor, handler) }
+            block: suspend ToolScope.() -> ToolResult,
+        ): TachyonServerBuilder = this.also { featureRegistrar.tool(descriptor, block) }
 
         /**
          * Registers a static resource with a suspending handler block.
@@ -275,10 +272,12 @@ public class TachyonServerBuilder
          * @param annotations optional presentation hints
          * @param size optional raw content size in bytes
          * @param icons associated icons, or an empty list
+         * @param meta optional protocol extension metadata
          * @param block handles reads of the registered resource
          * @return this builder
          */
         @JvmSynthetic
+        @Suppress("LongParameterList")
         public fun resource(
             name: String,
             uri: String,
@@ -288,21 +287,25 @@ public class TachyonServerBuilder
             annotations: Annotations? = null,
             size: Long? = null,
             icons: List<Icon> = emptyList(),
+            meta: Map<String, Any>? = null,
             block: suspend ResourceScope.() -> ResourceContents,
         ): TachyonServerBuilder =
-            this.also {
-                featureRegistrar.resource(
-                    name = name,
-                    uri = uri,
-                    description = description,
-                    mimeType = mimeType,
-                    title = title,
-                    annotations = annotations,
-                    size = size,
-                    icons = icons,
-                    block = block,
-                )
-            }
+            resource(
+                descriptor =
+                    ResourceDescriptor
+                        .builder()
+                        .name(name)
+                        .uri(uri)
+                        .description(description)
+                        .mimeType(mimeType)
+                        .title(title)
+                        .annotations(annotations)
+                        .size(size)
+                        .icons(icons)
+                        .meta(meta)
+                        .build(),
+                block = block,
+            )
 
         /**
          * Registers a prebuilt static-resource descriptor.
@@ -322,32 +325,53 @@ public class TachyonServerBuilder
          *
          * @param name The prompt name.
          * @param description An optional description of the prompt.
-         * @param handler The handler that generates the prompt messages.
+         * @param title The optional human-readable title.
+         * @param arguments The arguments accepted by this prompt, or an empty list.
+         * @param inputSchema The optional JSON schema describing the prompt's arguments.
+         * @param icons The prompt icons, or an empty list.
+         * @param meta The optional protocol extension metadata.
+         * @param block The handler that generates the prompt messages.
          * @return This builder.
          */
         @JvmSynthetic
+        @Suppress("LongParameterList")
         public fun prompt(
             name: String,
             description: String? = null,
-            handler: suspend PromptScope.() -> List<PromptMessage>,
+            title: String? = null,
+            arguments: List<PromptArgument> = emptyList(),
+            inputSchema: JsonSchema? = null,
+            icons: List<Icon> = emptyList(),
+            meta: Map<String, Any>? = null,
+            block: suspend PromptScope.() -> List<PromptMessage>,
         ): TachyonServerBuilder =
-            this.also {
-                val descriptor = PromptDescriptor.of(name, description, null, emptyList(), null)
-                featureRegistrar.prompt(descriptor, handler)
-            }
+            prompt(
+                descriptor =
+                    PromptDescriptor
+                        .builder()
+                        .name(name)
+                        .description(description)
+                        .title(title)
+                        .arguments(arguments)
+                        .inputSchema(inputSchema)
+                        .icons(icons)
+                        .meta(meta)
+                        .build(),
+                block = block,
+            )
 
         /**
          * Registers a prebuilt prompt descriptor with a suspending handler block.
          *
          * @param descriptor prompt descriptor
-         * @param handler handler invoked for prompt requests
+         * @param block handler invoked for prompt requests
          * @return this builder
          */
         @JvmSynthetic
         public fun prompt(
             descriptor: PromptDescriptor,
-            handler: suspend PromptScope.() -> List<PromptMessage>,
-        ): TachyonServerBuilder = this.also { featureRegistrar.prompt(descriptor, handler) }
+            block: suspend PromptScope.() -> List<PromptMessage>,
+        ): TachyonServerBuilder = this.also { featureRegistrar.prompt(descriptor, block) }
 
         /**
          * Registers a resource template with the server.
@@ -359,10 +383,12 @@ public class TachyonServerBuilder
          * @param title The optional template title.
          * @param annotations The optional template annotations.
          * @param icons The template icons, or an empty list.
+         * @param meta The optional protocol extension metadata.
          * @param block Handles requests for resources matching the template.
          * @return This builder.
          */
         @JvmSynthetic
+        @Suppress("LongParameterList")
         public fun resourceTemplate(
             name: String,
             uriTemplate: String,
@@ -371,20 +397,24 @@ public class TachyonServerBuilder
             title: String? = null,
             annotations: Annotations? = null,
             icons: List<Icon> = emptyList(),
+            meta: Map<String, Any>? = null,
             block: suspend TemplateScope.() -> ResourceContents,
         ): TachyonServerBuilder =
-            this.also {
-                featureRegistrar.resourceTemplate(
-                    name = name,
-                    uriTemplate = uriTemplate,
-                    description = description,
-                    mimeType = mimeType,
-                    title = title,
-                    annotations = annotations,
-                    icons = icons,
-                    block = block,
-                )
-            }
+            resourceTemplate(
+                descriptor =
+                    ResourceTemplateDescriptor
+                        .builder()
+                        .name(name)
+                        .uriTemplate(uriTemplate)
+                        .description(description)
+                        .mimeType(mimeType)
+                        .title(title)
+                        .annotations(annotations)
+                        .icons(icons)
+                        .meta(meta)
+                        .build(),
+                block = block,
+            )
 
         /**
          * Registers a prebuilt resource-template descriptor.
@@ -403,32 +433,32 @@ public class TachyonServerBuilder
          * Registers a completion handler for a prompt's arguments.
          *
          * @param promptName the prompt name
-         * @param handler the suspend function that returns completion candidates
+         * @param block the suspend function that returns completion candidates
          * @return this builder
          */
         @JvmSynthetic
         public fun promptCompletion(
             promptName: String,
-            handler: suspend CompletionScope.() -> CompletionResult,
+            block: suspend CompletionScope.() -> CompletionResult,
         ): TachyonServerBuilder =
             this.also {
-                featureRegistrar.promptCompletion(promptName, handler)
+                featureRegistrar.promptCompletion(promptName, block)
             }
 
         /**
          * Registers a completion handler for a resource template's variables.
          *
          * @param uriOrTemplate the resource URI or template
-         * @param handler the suspend function that returns completion candidates
+         * @param block the suspend function that returns completion candidates
          * @return this builder
          */
         @JvmSynthetic
         public fun resourceCompletion(
             uriOrTemplate: String,
-            handler: suspend CompletionScope.() -> CompletionResult,
+            block: suspend CompletionScope.() -> CompletionResult,
         ): TachyonServerBuilder =
             this.also {
-                featureRegistrar.resourceCompletion(uriOrTemplate, handler)
+                featureRegistrar.resourceCompletion(uriOrTemplate, block)
             }
 
         /**
@@ -445,9 +475,8 @@ public class TachyonServerBuilder
             taskSupport: TaskSupport? = null,
             annotations: ToolAnnotations? = null,
             icons: List<Icon>? = null,
-            extensionId: String? = null,
             meta: Map<String, Any>? = null,
-            handler: suspend ToolScope.() -> ToolResult,
+            block: suspend ToolScope.() -> ToolResult,
         ): TachyonServerBuilder =
             this.tool(
                 name = name,
@@ -458,9 +487,8 @@ public class TachyonServerBuilder
                 taskSupport = taskSupport,
                 annotations = annotations,
                 icons = icons,
-                extensionId = extensionId,
                 meta = meta,
-                handler = handler,
+                block = block,
             )
 
         public fun name(name: String): TachyonServerBuilder = this.also { delegate.name(name) }

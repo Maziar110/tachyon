@@ -2,8 +2,6 @@
 package dev.tachyonmcp.kotlin.server.config
 
 import dev.tachyonmcp.api.json.JsonSchema
-import dev.tachyonmcp.api.server.domain.Annotations
-import dev.tachyonmcp.api.server.domain.Icon
 import dev.tachyonmcp.api.server.domain.PromptMessage
 import dev.tachyonmcp.api.server.domain.ResourceContents
 import dev.tachyonmcp.api.server.features.completions.CompletionResult
@@ -27,67 +25,11 @@ internal class KotlinFeatureRegistrar(
     private val runtime: CoroutineRuntime,
 ) {
     fun resource(
-        name: String,
-        uri: String,
-        description: String?,
-        mimeType: String?,
-        title: String?,
-        annotations: Annotations?,
-        size: Long?,
-        icons: List<Icon>,
-        block: suspend ResourceScope.() -> ResourceContents,
-    ) {
-        delegate.withResources { resources ->
-            resources.registerAsync(
-                { descriptor ->
-                    descriptor
-                        .name(name)
-                        .uri(uri)
-                        .description(description)
-                        .mimeType(mimeType)
-                        .title(title)
-                        .annotations(annotations)
-                        .size(size)
-                        .icons(icons)
-                },
-                resourceFn(name, mimeType, runtime, block),
-            )
-        }
-    }
-
-    fun resource(
         descriptor: ResourceDescriptor,
         block: suspend ResourceScope.() -> ResourceContents,
     ) {
         delegate.withResources {
             it.registerAsync(descriptor, resourceFn(descriptor, runtime, block))
-        }
-    }
-
-    fun resourceTemplate(
-        name: String,
-        uriTemplate: String,
-        description: String?,
-        mimeType: String?,
-        title: String?,
-        annotations: Annotations?,
-        icons: List<Icon>,
-        block: suspend TemplateScope.() -> ResourceContents,
-    ) {
-        delegate.withResources { resources ->
-            resources.registerTemplateAsync(
-                { descriptor ->
-                    descriptor
-                        .name(name)
-                        .uriTemplate(uriTemplate)
-                        .description(description)
-                        .mimeType(mimeType)
-                        .title(title)
-                        .annotations(annotations)
-                        .icons(icons)
-                },
-                templateFn(name, mimeType, runtime, block),
-            )
         }
     }
 
@@ -109,7 +51,7 @@ internal class KotlinFeatureRegistrar(
         inputSchema: JsonSchema?,
         outputSchema: JsonSchema?,
         taskSupport: TaskSupport?,
-        handler: suspend ToolScope.() -> ToolResult,
+        block: suspend ToolScope.() -> ToolResult,
     ) {
         delegate.withTools { tools ->
             tools.registerAsync(
@@ -121,7 +63,7 @@ internal class KotlinFeatureRegistrar(
                         .outputSchema(outputSchema)
                         .taskSupport(taskSupport)
                 },
-                toolFn(name, runtime, handler),
+                toolFn(name, runtime, block),
             )
         }
     }
@@ -132,7 +74,7 @@ internal class KotlinFeatureRegistrar(
         inputSchema: String?,
         outputSchema: String?,
         taskSupport: TaskSupport?,
-        handler: suspend ToolScope.() -> ToolResult,
+        block: suspend ToolScope.() -> ToolResult,
     ) {
         delegate.withTools { tools ->
             tools.registerAsync(
@@ -144,49 +86,49 @@ internal class KotlinFeatureRegistrar(
                         .outputSchema(outputSchema)
                         .taskSupport(taskSupport)
                 },
-                toolFn(name, runtime, handler),
+                toolFn(name, runtime, block),
             )
         }
     }
 
     fun tool(
         descriptor: ToolDescriptor,
-        handler: suspend ToolScope.() -> ToolResult,
+        block: suspend ToolScope.() -> ToolResult,
     ) {
         delegate.withTools {
-            it.registerAsync(descriptor, toolFn(descriptor.name(), runtime, handler))
+            it.registerAsync(descriptor, toolFn(descriptor.name(), runtime, block))
         }
     }
 
     fun prompt(
         descriptor: PromptDescriptor,
-        handler: suspend PromptScope.() -> List<PromptMessage>,
+        block: suspend PromptScope.() -> List<PromptMessage>,
     ) {
         delegate.withPrompts {
-            it.registerAsync(descriptor, promptFn(descriptor, runtime, handler))
+            it.registerAsync(descriptor, promptFn(descriptor, runtime, block))
         }
     }
 
     fun promptCompletion(
         promptName: String,
-        handler: suspend CompletionScope.() -> CompletionResult,
+        block: suspend CompletionScope.() -> CompletionResult,
     ) {
         delegate.withCompletions {
             it.registerForPromptAsync(
                 promptName,
-                promptCompletionFn(promptName, runtime, handler),
+                promptCompletionFn(promptName, runtime, block),
             )
         }
     }
 
     fun resourceCompletion(
         uriOrTemplate: String,
-        handler: suspend CompletionScope.() -> CompletionResult,
+        block: suspend CompletionScope.() -> CompletionResult,
     ) {
         delegate.withCompletions {
             it.registerForResourceAsync(
                 uriOrTemplate,
-                resourceCompletionFn(uriOrTemplate, runtime, handler),
+                resourceCompletionFn(uriOrTemplate, runtime, block),
             )
         }
     }
