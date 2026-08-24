@@ -140,6 +140,13 @@ public interface ServerEngine extends TachyonServer {
     /** Replays session events after the given sequence number. */
     List<SessionEvent> replay(String sessionId, long lastSeq);
 
+    /**
+     * Returns {@code true} if the configured {@code SessionEventStore} has ever recorded an
+     * event for {@code sessionId} — used to recognize a resumable session that this process has
+     * no live record of (e.g. after a restart).
+     */
+    boolean hasSessionHistory(String sessionId);
+
     /** Returns and increments the event ID counter. */
     long nextEventId();
 

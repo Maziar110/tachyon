@@ -37,7 +37,7 @@ server.start();
 |---|---|
 | `.info(cfg)` | name, version, description, title, websiteUrl, instructions |
 | `.capabilities(cfg)` | tools/resources/prompts/tasks/completions/logging |
-| `.session(cfg)` | enabled (off by default = stateless), sessionTtl, SessionEventStore, SessionStore, SessionIdGenerator |
+| `.session(cfg)` | enabled (off by default = stateless), sessionTtl, SessionEventStore, SessionIdGenerator |
 | `.network(cfg)` | host, port, endpointPath, timeouts, CORS, maxContentLength, ioEngine |
 | `.runtime(cfg)` | shutdownGracePeriod, requestTimeout, clock |
 | `.monitoring(cfg)` | slow-request diagnostics (off by default) |
