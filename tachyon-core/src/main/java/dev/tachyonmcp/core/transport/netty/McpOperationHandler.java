@@ -14,7 +14,6 @@ import dev.tachyonmcp.api.server.domain.RequestId;
 import dev.tachyonmcp.core.protocol.mcp.McpHeaderNames;
 import dev.tachyonmcp.core.runtime.ChannelContext;
 import dev.tachyonmcp.core.runtime.InteractionEvent;
-import dev.tachyonmcp.core.runtime.Session;
 import dev.tachyonmcp.core.runtime.SseEvent;
 import dev.tachyonmcp.core.server.McpDispatcher;
 import dev.tachyonmcp.core.server.internal.ServerEngine;
@@ -414,30 +413,12 @@ public class McpOperationHandler extends ChannelInboundHandlerAdapter {
             sendPlainTextAndClose(ctx, HttpResponseStatus.BAD_REQUEST, "Missing MCP-Session-Id header", origin);
             return;
         }
-        var session = server.getSession(sessionId).orElseGet(() -> reconnectedSession(sessionId));
-        if (session == null) {
+        var session = server.resumeSession(sessionId);
+        if (session.isEmpty()) {
             sendPlainTextAndClose(ctx, HttpResponseStatus.NOT_FOUND, "Unknown session", origin);
             return;
         }
-        sseManager.openStream(ctx, session, req.headers().get(McpHeaderNames.LAST_EVENT_ID), origin);
-    }
-
-    /**
-     * Recreates the live session for a reconnect this process has no live record of — a restart
-     * (fresh process, empty session table) whose durable {@code SessionEventStore} still has this
-     * id's event history means it's a resumable client, not an unknown one. {@code Last-Event-ID}
-     * replay then proceeds as normal once {@code openStream} attaches the connection.
-     *
-     * <p>ponytail: existence is "the log has any event for this id" — a session removed via
-     * DELETE can still be recognized this way until its events age out of the log's retention.
-     * {@code SessionConfig.onSessionClosed} is available to react to removal explicitly, if
-     * that ever needs tightening.
-     */
-    private @Nullable Session reconnectedSession(String sessionId) {
-        if (!server.hasSessionHistory(sessionId)) {
-            return null;
-        }
-        return server.createSession(sessionId);
+        sseManager.openStream(ctx, session.get(), req.headers().get(McpHeaderNames.LAST_EVENT_ID), origin);
     }
 
     private void handleDelete(ChannelHandlerContext ctx, FullHttpRequest req, @Nullable String origin) {

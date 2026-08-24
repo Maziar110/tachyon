@@ -616,6 +616,11 @@ final class DefaultTachyonServer implements ServerEngine, ExtensionContext {
     }
 
     @Override
+    public Optional<Session> resumeSession(String sessionId) {
+        return sessionManager.getOrResumeSession(sessionId, () -> sessionEventStore.exists(sessionId));
+    }
+
+    @Override
     public void removeSession(String sessionId) {
         sessionManager.removeSession(sessionId);
     }
@@ -808,11 +813,6 @@ final class DefaultTachyonServer implements ServerEngine, ExtensionContext {
     @Override
     public List<SessionEvent> replay(String sessionId, long lastSeq) {
         return sessionEventStore.replay(sessionId, lastSeq);
-    }
-
-    @Override
-    public boolean hasSessionHistory(String sessionId) {
-        return sessionEventStore.exists(sessionId);
     }
 
     @Override

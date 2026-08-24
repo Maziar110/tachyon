@@ -9,7 +9,9 @@ import dev.tachyonmcp.core.server.internal.AbstractJanitor;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -22,6 +24,15 @@ public class SessionManager implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(SessionManager.class);
 
     private final ConcurrentHashMap<String, Session> sessions = new ConcurrentHashMap<>();
+    /**
+     * Session ids explicitly torn down (client DELETE, or an abrupt close during the init
+     * handshake) — never resurrected by {@link #getOrResumeSession}, unlike a TTL-expired
+     * session, which is meant to be resumable. Grows for the process lifetime; a session id
+     * removed this way is never forgotten. Acceptable for now — explicit termination is rare
+     * relative to normal traffic — but worth bounding if that stops being true.
+     */
+    private final Set<String> explicitlyClosed = ConcurrentHashMap.newKeySet();
+
     private final @Nullable Consumer<String> onSessionClosed;
     private @Nullable AbstractJanitor janitor;
 
@@ -59,13 +70,42 @@ public class SessionManager implements AutoCloseable {
         return Optional.ofNullable(sessions.get(sessionId));
     }
 
+    /**
+     * Returns the live session for {@code sessionId} if present; otherwise, unless it was
+     * explicitly closed, atomically creates and returns one if {@code hasHistory} confirms a
+     * resumable event history exists. {@code hasHistory} is only invoked on a live-table miss —
+     * it may be expensive (a durable store lookup). The check-and-create is atomic per id, so
+     * concurrent callers for the same id observe the same instance; none replaces or closes an
+     * already-created session.
+     */
+    public Optional<Session> getOrResumeSession(String sessionId, BooleanSupplier hasHistory) {
+        var existing = sessions.get(sessionId);
+        if (existing != null) {
+            return Optional.of(existing);
+        }
+        if (explicitlyClosed.contains(sessionId) || !hasHistory.getAsBoolean()) {
+            return Optional.empty();
+        }
+        return Optional.of(sessions.computeIfAbsent(sessionId, id -> {
+            logger.info("Session recognized from history and recreated: {}", id);
+            return new Session(id, SseConnection.noop());
+        }));
+    }
+
     /** Returns all active sessions. */
     public Collection<Session> allSessions() {
         return sessions.values();
     }
 
-    /** Removes and closes the session with the given ID. */
+    /**
+     * Removes and closes the session with the given ID, marking it so
+     * {@link #getOrResumeSession} never resurrects it — unlike a TTL-expired session (see
+     * {@link #sweep}), an explicitly closed one is done for good.
+     */
     public void removeSession(String sessionId) {
+        // Written before the live-map removal so a concurrent getOrResumeSession racing this
+        // call either still sees the live session (fine) or already sees the tombstone.
+        explicitlyClosed.add(sessionId);
         var session = sessions.remove(sessionId);
         if (session != null) {
             session.close();
