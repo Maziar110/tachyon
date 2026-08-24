@@ -255,6 +255,32 @@ final class DefaultServerBuilder implements ServerBuilder {
         return this;
     }
 
+    // === Annotation-based registration ===
+
+    private final List<Consumer<AnnotationContext>> annotationConfigurers = new ArrayList<>();
+
+    @Override
+    public ServerBuilder annotations(Consumer<AnnotationContext> configurer) {
+        annotationConfigurers.add(configurer);
+        return this;
+    }
+
+    private void applyAnnotationRegistrations(TachyonServer server) {
+        if (annotationConfigurers.isEmpty()) return;
+        var ctx = new AnnotationContext();
+        annotationConfigurers.forEach(configurer -> configurer.accept(ctx));
+        var registrationContext = new DefaultAnnotationRegistrationContext(
+                server.tools(),
+                server.resources(),
+                server.prompts(),
+                server.completions(),
+                payloadSerializer,
+                payloadDeserializer);
+        for (var reg : ctx.registrations()) {
+            reg.provider().register(reg.instance(), registrationContext);
+        }
+    }
+
     // === Transport escape hatch ===
 
     /**
@@ -304,7 +330,13 @@ final class DefaultServerBuilder implements ServerBuilder {
                 null,
                 allExtensions,
                 pipelineCustomizer);
-        bootstrapRegistrations.forEach(registrar -> registrar.accept(server));
+        try {
+            bootstrapRegistrations.forEach(registrar -> registrar.accept(server));
+            applyAnnotationRegistrations(server);
+        } catch (Throwable t) {
+            server.close();
+            throw t;
+        }
         return server;
     }
 
