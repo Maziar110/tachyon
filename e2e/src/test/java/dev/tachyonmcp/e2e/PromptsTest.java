@@ -1,6 +1,7 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.e2e;
 
+import static dev.tachyonmcp.testkit.JsonRpcResponseAssert.assertThat;
 import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -56,10 +57,16 @@ class PromptsTest extends AbstractStatelessMcpE2eTest {
                 {"jsonrpc":"2.0","id":2,"method":"prompts/get","params":{"name":"greeting"}}
                 """);
 
-            assertThatJson(response.body())
-                    .inPath("$.result.messages[0].content.text")
-                    .isEqualTo("Hello world!");
-            assertThatJson(response.body()).inPath("$.result.messages[0].role").isEqualTo("user");
+            assertThatJson(response.body()).isEqualTo("""
+                    {
+                      "jsonrpc":"2.0",
+                      "id":2,
+                      "result":{"description":"A greeting prompt","messages":[{
+                        "role":"user",
+                        "content":{"type":"text","text":"Hello world!"}
+                      }]}
+                    }
+                    """);
         }
     }
 
@@ -95,7 +102,7 @@ class PromptsTest extends AbstractStatelessMcpE2eTest {
                 {"jsonrpc":"2.0","id":2,"method":"prompts/get","params":{"name":"unknown"}}
                 """);
 
-            assertThatJson(response.body()).inPath("$.error.code").isEqualTo(-32602);
+            assertThat(response).isJsonRpcError().hasErrorCode(-32602);
         }
     }
 
@@ -161,7 +168,9 @@ class PromptsTest extends AbstractStatelessMcpE2eTest {
                 {"jsonrpc":"2.0","id":2,"method":"prompts/list"}
                 """);
 
-            assertThatJson(response.body()).inPath("$.result.prompts").isArray().isEmpty();
+            assertThatJson(response.body()).isEqualTo("""
+                    {"jsonrpc":"2.0","id":2,"result":{"prompts":[]}}
+                    """);
         }
     }
 
@@ -180,12 +189,20 @@ class PromptsTest extends AbstractStatelessMcpE2eTest {
                 {"jsonrpc":"2.0","id":2,"method":"prompts/get","params":{"name":"embedded"}}
                 """);
 
-            assertThatJson(response.body())
-                    .inPath("$.result.messages[0].content.type")
-                    .isEqualTo("resource");
-            assertThatJson(response.body())
-                    .inPath("$.result.messages[0].content.resource.text")
-                    .isEqualTo("embedded content");
+            assertThatJson(response.body()).isEqualTo("""
+                    {
+                      "jsonrpc":"2.0",
+                      "id":2,
+                      "result":{"description":"Prompt with embedded resource","messages":[{
+                        "role":"user",
+                        "content":{"type":"resource","resource":{
+                          "uri":"test://embedded",
+                          "mimeType":"text/plain",
+                          "text":"embedded content"
+                        }}
+                      }]}
+                    }
+                    """);
         }
     }
 
@@ -204,15 +221,20 @@ class PromptsTest extends AbstractStatelessMcpE2eTest {
                 {"jsonrpc":"2.0","id":2,"method":"prompts/get","params":{"name":"image-prompt"}}
                 """);
 
-            assertThatJson(response.body())
-                    .inPath("$.result.messages[0].content.type")
-                    .isEqualTo("image");
-            assertThatJson(response.body())
-                    .inPath("$.result.messages[0].content.data")
-                    .isEqualTo("iVBORw0KGgo=");
-            assertThatJson(response.body())
-                    .inPath("$.result.messages[0].content.mimeType")
-                    .isEqualTo("image/png");
+            assertThatJson(response.body()).isEqualTo("""
+                    {
+                      "jsonrpc":"2.0",
+                      "id":2,
+                      "result":{"description":"Prompt with image","messages":[{
+                        "role":"user",
+                        "content":{
+                          "type":"image",
+                          "data":"iVBORw0KGgo=",
+                          "mimeType":"image/png"
+                        }
+                      }]}
+                    }
+                    """);
         }
     }
 }

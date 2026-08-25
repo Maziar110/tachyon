@@ -1,7 +1,7 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.e2e;
 
-import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
+import static dev.tachyonmcp.testkit.JsonRpcResponseAssert.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.google.gson.Gson;
@@ -55,10 +55,13 @@ class PayloadSerdeTest extends AbstractStatelessMcpE2eTest {
                 """);
 
             assertThat(response.statusCode()).isEqualTo(200);
-            assertThatJson(response.body())
-                    .inPath("$.result.structuredContent.message")
-                    .isEqualTo("hello from Gson");
-            assertThatJson(response.body()).inPath("$.result.content[0].text").isEqualTo("text fallback");
+            assertThat(response)
+                    .isSuccess()
+                    .hasId(2)
+                    .hasTextContent("text fallback")
+                    .hasStructuredContent("""
+                            {"message":"hello from Gson"}
+                            """);
         }
     }
 
@@ -80,10 +83,13 @@ class PayloadSerdeTest extends AbstractStatelessMcpE2eTest {
                 """);
 
             assertThat(response.statusCode()).isEqualTo(200);
-            assertThatJson(response.body())
-                    .inPath("$.result.structuredContent.echo")
-                    .isEqualTo("exact");
-            assertThatJson(response.body()).inPath("$.result.content[0].text").isEqualTo("raw fallback");
+            assertThat(response)
+                    .isSuccess()
+                    .hasId(2)
+                    .hasTextContent("raw fallback")
+                    .hasStructuredContent("""
+                            {"echo":"exact"}
+                            """);
         }
     }
 
@@ -121,9 +127,9 @@ class PayloadSerdeTest extends AbstractStatelessMcpE2eTest {
                 """);
 
             assertThat(response.statusCode()).isEqualTo(200);
-            assertThatJson(response.body())
-                    .inPath("$.result.structuredContent.message")
-                    .isEqualTo("valid");
+            assertThat(response).isSuccess().hasId(2).hasTextContent("ok").hasStructuredContent("""
+                            {"message":"valid","extra":42}
+                            """);
         }
     }
 
@@ -161,7 +167,7 @@ class PayloadSerdeTest extends AbstractStatelessMcpE2eTest {
                 """);
 
             assertThat(response.statusCode()).isEqualTo(200);
-            assertThatJson(response.body()).inPath("$.result.content[0].text").isEqualTo("decoded: {key=value}");
+            assertThat(response).isSuccess().hasTextContent("decoded: {key=value}");
         }
     }
 
