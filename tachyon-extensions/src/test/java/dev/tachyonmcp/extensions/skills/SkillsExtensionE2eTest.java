@@ -8,6 +8,7 @@ import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.tachyonmcp.core.server.features.resources.MimeTypes;
+import dev.tachyonmcp.testkit.Mcp20251125Client;
 import dev.tachyonmcp.testkit.Mcp20260728Client;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -29,6 +30,20 @@ import tools.jackson.databind.ObjectMapper;
  * {@code resources/directory/read}, with per-request extension negotiation.
  */
 class SkillsExtensionE2eTest {
+
+    private static final String PDF_SKILL = """
+        ---
+        name: pdf-processing
+        description: Extract, fill, and assemble PDF documents
+        metadata:
+          version: "2.1.0"
+        ---
+
+        # PDF Processing
+
+        Extract, fill, and assemble PDF documents.
+        Pick the matching template from `templates/` for the document type.
+        """;
 
     private final SkillsRegistry classpathSkillsRegistry = new ClasspathSkillsRegistry("skills");
     private final SkillsRegistry filesystemSkillsRegistry = new FilesystemSkillsRegistry(filesystemSkillsDir);
@@ -59,11 +74,11 @@ class SkillsExtensionE2eTest {
                           "description":"Follow this team's Git conventions for branching and commits"
                         },
                         "resources":[
-                          {"uri":"skill://git-workflow/SKILL.md","digest":"sha256:b9de7cc1f03a390dd4ee3b2881a13eb5e39f02ec5f44ffb0ab9fb91e10c08d67"},
-                          {"uri":"skill://git-workflow/references/BRANCHING.md","digest":"sha256:c23e5f309d54105cc561675ce4384fa62971e00919fe9bd297a37e443746c24e"}
+                          {"uri":"skill://git-workflow/SKILL.md","digest":"sha256:b9de7cc1f03a390dd4ee3b2881a13eb5e39f02ec5f44ffb0ab9fb91e10c08d67","size":234},
+                          {"uri":"skill://git-workflow/references/BRANCHING.md","digest":"sha256:c23e5f309d54105cc561675ce4384fa62971e00919fe9bd297a37e443746c24e","size":68}
                         ]
                       },
-                      {"frontmatter":{"description":"How to read a file","name":"read-file"},"resources":[{"digest":"sha256:c009fac2e4613f3d635e99351e59f685250188809b2d6a8650b86a3eb0b8da2d","uri":"skill://read-file/SKILL.md"}],"uri":"skill://read-file/SKILL.md"},
+                      {"frontmatter":{"description":"How to read a file","name":"read-file"},"resources":[{"digest":"sha256:c009fac2e4613f3d635e99351e59f685250188809b2d6a8650b86a3eb0b8da2d","size":85,"uri":"skill://read-file/SKILL.md"}],"uri":"skill://read-file/SKILL.md"},
                       {
                         "uri":"skill://pdf-processing/SKILL.md",
                         "frontmatter":{
@@ -72,9 +87,9 @@ class SkillsExtensionE2eTest {
                           "metadata":{"version":"2.1.0"}
                         },
                         "resources":[
-                          {"uri":"skill://pdf-processing/SKILL.md","digest":"sha256:da96519e26e173b406339e31ccf3adb0b0bd45c5fdfbabe335bf2ded216b2635"},
-                          {"uri":"skill://pdf-processing/scripts/extract.py","digest":"sha256:f05fea0e15cb5f951049570d4cebb3a84b272fd3390c85e8be7586f84f0b68f8"},
-                          {"uri":"skill://pdf-processing/templates/invoice.md","digest":"sha256:cd1a5be9eb7a5a46feea259ca26620f73dbd3587cc5111da44fff6489993c643"}
+                          {"uri":"skill://pdf-processing/SKILL.md","digest":"sha256:da96519e26e173b406339e31ccf3adb0b0bd45c5fdfbabe335bf2ded216b2635","size":243},
+                          {"uri":"skill://pdf-processing/scripts/extract.py","digest":"sha256:f05fea0e15cb5f951049570d4cebb3a84b272fd3390c85e8be7586f84f0b68f8","size":40},
+                          {"uri":"skill://pdf-processing/templates/invoice.md","digest":"sha256:cd1a5be9eb7a5a46feea259ca26620f73dbd3587cc5111da44fff6489993c643","size":43}
                         ]
                       }
 
@@ -132,9 +147,9 @@ class SkillsExtensionE2eTest {
                         "metadata":{"version":"2.1.0"}
                       },
                       "resources":[
-                        {"uri":"skill://pdf-processing/SKILL.md","digest":"sha256:da96519e26e173b406339e31ccf3adb0b0bd45c5fdfbabe335bf2ded216b2635"},
-                        {"uri":"skill://pdf-processing/scripts/extract.py","digest":"sha256:f05fea0e15cb5f951049570d4cebb3a84b272fd3390c85e8be7586f84f0b68f8"},
-                        {"uri":"skill://pdf-processing/templates/invoice.md","digest":"sha256:cd1a5be9eb7a5a46feea259ca26620f73dbd3587cc5111da44fff6489993c643"}
+                        {"uri":"skill://pdf-processing/SKILL.md","digest":"sha256:da96519e26e173b406339e31ccf3adb0b0bd45c5fdfbabe335bf2ded216b2635","size":243},
+                        {"uri":"skill://pdf-processing/scripts/extract.py","digest":"sha256:f05fea0e15cb5f951049570d4cebb3a84b272fd3390c85e8be7586f84f0b68f8","size":40},
+                        {"uri":"skill://pdf-processing/templates/invoice.md","digest":"sha256:cd1a5be9eb7a5a46feea259ca26620f73dbd3587cc5111da44fff6489993c643","size":43}
                       ]
                     },
                     "resultType":"complete"
@@ -251,8 +266,8 @@ class SkillsExtensionE2eTest {
                           "description":"Follow this team's Git conventions for branching and commits"
                         },
                         "resources":[
-                          {"uri":"skill://git-workflow/SKILL.md","digest":"sha256:b9de7cc1f03a390dd4ee3b2881a13eb5e39f02ec5f44ffb0ab9fb91e10c08d67"},
-                          {"uri":"skill://git-workflow/references/BRANCHING.md","digest":"sha256:c23e5f309d54105cc561675ce4384fa62971e00919fe9bd297a37e443746c24e"}
+                          {"uri":"skill://git-workflow/SKILL.md","digest":"sha256:b9de7cc1f03a390dd4ee3b2881a13eb5e39f02ec5f44ffb0ab9fb91e10c08d67","size":234},
+                          {"uri":"skill://git-workflow/references/BRANCHING.md","digest":"sha256:c23e5f309d54105cc561675ce4384fa62971e00919fe9bd297a37e443746c24e","size":68}
                         ]
                       },
                       {
@@ -264,6 +279,7 @@ class SkillsExtensionE2eTest {
                         "resources":[
                             {
                               "digest":"sha256:c009fac2e4613f3d635e99351e59f685250188809b2d6a8650b86a3eb0b8da2d",
+                              "size":85,
                               "uri":"skill://read-file/SKILL.md"
                              }
                         ]}
@@ -305,8 +321,8 @@ class SkillsExtensionE2eTest {
                           "description":"Follow this team's Git conventions for branching and commits"
                         },
                         "resources":[
-                          {"uri":"skill://team/git-workflow/SKILL.md","digest":"sha256:b9de7cc1f03a390dd4ee3b2881a13eb5e39f02ec5f44ffb0ab9fb91e10c08d67"},
-                          {"uri":"skill://team/git-workflow/references/BRANCHING.md","digest":"sha256:c23e5f309d54105cc561675ce4384fa62971e00919fe9bd297a37e443746c24e"}
+                          {"uri":"skill://team/git-workflow/SKILL.md","digest":"sha256:b9de7cc1f03a390dd4ee3b2881a13eb5e39f02ec5f44ffb0ab9fb91e10c08d67","size":234},
+                          {"uri":"skill://team/git-workflow/references/BRANCHING.md","digest":"sha256:c23e5f309d54105cc561675ce4384fa62971e00919fe9bd297a37e443746c24e","size":68}
                         ]
                       },
                       {
@@ -317,9 +333,9 @@ class SkillsExtensionE2eTest {
                           "metadata":{"version":"2.1.0"}
                         },
                         "resources":[
-                          {"uri":"skill://acme/pdf-processing/SKILL.md","digest":"sha256:da96519e26e173b406339e31ccf3adb0b0bd45c5fdfbabe335bf2ded216b2635"},
-                          {"uri":"skill://acme/pdf-processing/scripts/extract.py","digest":"sha256:f05fea0e15cb5f951049570d4cebb3a84b272fd3390c85e8be7586f84f0b68f8"},
-                          {"uri":"skill://acme/pdf-processing/templates/invoice.md","digest":"sha256:cd1a5be9eb7a5a46feea259ca26620f73dbd3587cc5111da44fff6489993c643"}
+                          {"uri":"skill://acme/pdf-processing/SKILL.md","digest":"sha256:da96519e26e173b406339e31ccf3adb0b0bd45c5fdfbabe335bf2ded216b2635","size":243},
+                          {"uri":"skill://acme/pdf-processing/scripts/extract.py","digest":"sha256:f05fea0e15cb5f951049570d4cebb3a84b272fd3390c85e8be7586f84f0b68f8","size":40},
+                          {"uri":"skill://acme/pdf-processing/templates/invoice.md","digest":"sha256:cd1a5be9eb7a5a46feea259ca26620f73dbd3587cc5111da44fff6489993c643","size":43}
                         ]
                       }
                     ],
@@ -329,6 +345,292 @@ class SkillsExtensionE2eTest {
                   }
                 }
                 """);
+        }
+    }
+
+    @Test
+    void sameNamedSkillsUnderDifferentNamespacesAreBothListedAndReadableOn20260728() throws Exception {
+        var gitWorkflowDir = filesystemSkillsDir.resolve("git-workflow");
+        try (final var server = startServer(SkillsExtension.builder()
+                        .registry(new FilesystemSkillsRegistry(gitWorkflowDir, "team/git-workflow"))
+                        .registry(new FilesystemSkillsRegistry(gitWorkflowDir, "acme/git-workflow"))
+                        .build());
+                final var client = createClient(server.port())) {
+
+            // skills/list: both present in registration order, each keeping its own frontmatter name
+            // language=JSON
+            var skillsList = client.post("""
+                {"jsonrpc":"2.0","id":1,"method":"skills/list","params":{"_meta":{"%s":{}}}}
+                """.formatted(SkillsExtension.ID));
+            // language=JSON
+            assertThatJson(skillsList.body()).isEqualTo("""
+                {
+                  "jsonrpc":"2.0",
+                  "id":1,
+                  "result":{
+                    "skills":[
+                      {
+                        "uri":"skill://team/git-workflow/SKILL.md",
+                        "frontmatter":{
+                          "name":"git-workflow",
+                          "description":"Follow this team's Git conventions for branching and commits"
+                        },
+                        "resources":[
+                          {"uri":"skill://team/git-workflow/SKILL.md","digest":"sha256:b9de7cc1f03a390dd4ee3b2881a13eb5e39f02ec5f44ffb0ab9fb91e10c08d67","size":234},
+                          {"uri":"skill://team/git-workflow/references/BRANCHING.md","digest":"sha256:c23e5f309d54105cc561675ce4384fa62971e00919fe9bd297a37e443746c24e","size":68}
+                        ]
+                      },
+                      {
+                        "uri":"skill://acme/git-workflow/SKILL.md",
+                        "frontmatter":{
+                          "name":"git-workflow",
+                          "description":"Follow this team's Git conventions for branching and commits"
+                        },
+                        "resources":[
+                          {"uri":"skill://acme/git-workflow/SKILL.md","digest":"sha256:b9de7cc1f03a390dd4ee3b2881a13eb5e39f02ec5f44ffb0ab9fb91e10c08d67","size":234},
+                          {"uri":"skill://acme/git-workflow/references/BRANCHING.md","digest":"sha256:c23e5f309d54105cc561675ce4384fa62971e00919fe9bd297a37e443746c24e","size":68}
+                        ]
+                      }
+                    ],
+                    "resultType":"complete",
+                    "ttlMs":0,
+                    "cacheScope":"public"
+                  }
+                }
+                """);
+
+            // skills/get: each fetched independently by its own URI, no cross-contamination
+            // language=JSON
+            var teamGet = client.post("""
+                {"jsonrpc":"2.0","id":2,"method":"skills/get","params":{"uri":"skill://team/git-workflow/SKILL.md","_meta":{"%s":{}}}}
+                """.formatted(SkillsExtension.ID));
+            // language=JSON
+            assertThatJson(teamGet.body()).isEqualTo("""
+                {
+                  "jsonrpc":"2.0",
+                  "id":2,
+                  "result":{
+                    "skill":{
+                      "uri":"skill://team/git-workflow/SKILL.md",
+                      "frontmatter":{
+                        "name":"git-workflow",
+                        "description":"Follow this team's Git conventions for branching and commits"
+                      },
+                      "resources":[
+                        {"uri":"skill://team/git-workflow/SKILL.md","digest":"sha256:b9de7cc1f03a390dd4ee3b2881a13eb5e39f02ec5f44ffb0ab9fb91e10c08d67","size":234},
+                        {"uri":"skill://team/git-workflow/references/BRANCHING.md","digest":"sha256:c23e5f309d54105cc561675ce4384fa62971e00919fe9bd297a37e443746c24e","size":68}
+                      ]
+                    },
+                    "resultType":"complete"
+                  }
+                }
+                """);
+
+            // language=JSON
+            var acmeGet = client.post("""
+                {"jsonrpc":"2.0","id":3,"method":"skills/get","params":{"uri":"skill://acme/git-workflow/SKILL.md","_meta":{"%s":{}}}}
+                """.formatted(SkillsExtension.ID));
+            // language=JSON
+            assertThatJson(acmeGet.body()).isEqualTo("""
+                {
+                  "jsonrpc":"2.0",
+                  "id":3,
+                  "result":{
+                    "skill":{
+                      "uri":"skill://acme/git-workflow/SKILL.md",
+                      "frontmatter":{
+                        "name":"git-workflow",
+                        "description":"Follow this team's Git conventions for branching and commits"
+                      },
+                      "resources":[
+                        {"uri":"skill://acme/git-workflow/SKILL.md","digest":"sha256:b9de7cc1f03a390dd4ee3b2881a13eb5e39f02ec5f44ffb0ab9fb91e10c08d67","size":234},
+                        {"uri":"skill://acme/git-workflow/references/BRANCHING.md","digest":"sha256:c23e5f309d54105cc561675ce4384fa62971e00919fe9bd297a37e443746c24e","size":68}
+                      ]
+                    },
+                    "resultType":"complete"
+                  }
+                }
+                """);
+
+            // base resources/list (no extension negotiation): both manifests present, same name
+            // language=JSON
+            var list = client.post("""
+                {"jsonrpc":"2.0","id":4,"method":"resources/list","params":{}}
+                """);
+            // language=JSON
+            assertThatJson(list.body()).isEqualTo("""
+                {
+                  "jsonrpc":"2.0",
+                  "id":4,
+                  "result":{
+                    "resources":[
+                      {
+                        "uri":"skill://acme/git-workflow/references/BRANCHING.md",
+                        "name":"acme/git-workflow/references/BRANCHING.md",
+                        "mimeType":"text/markdown"
+                      },
+                      {
+                        "uri":"skill://acme/git-workflow/SKILL.md",
+                        "name":"git-workflow",
+                        "description":"Follow this team's Git conventions for branching and commits",
+                        "mimeType":"text/markdown"
+                      },
+                      {
+                        "uri":"skill://team/git-workflow/SKILL.md",
+                        "name":"git-workflow",
+                        "description":"Follow this team's Git conventions for branching and commits",
+                        "mimeType":"text/markdown"
+                      },
+                      {
+                        "uri":"skill://team/git-workflow/references/BRANCHING.md",
+                        "name":"team/git-workflow/references/BRANCHING.md",
+                        "mimeType":"text/markdown"
+                      }
+                    ],
+                    "resultType":"complete",
+                    "ttlMs":0,
+                    "cacheScope":"public"
+                  }
+                }
+                """);
+
+            var skillMd = Files.readString(gitWorkflowDir.resolve("SKILL.md"));
+
+            // base resources/read: both readable by their own URI
+            // language=JSON
+            var teamRead = client.post("""
+                {"jsonrpc":"2.0","id":5,"method":"resources/read","params":{"uri":"skill://team/git-workflow/SKILL.md"}}
+                """);
+            // language=JSON
+            assertThatJson(teamRead.body()).isEqualTo("""
+                {
+                  "jsonrpc":"2.0",
+                  "id":5,
+                  "result":{
+                    "contents":[{
+                      "uri":"skill://team/git-workflow/SKILL.md",
+                      "mimeType":"text/markdown",
+                      "text":%s
+                    }],
+                    "resultType":"complete",
+                    "ttlMs":0,
+                    "cacheScope":"public"
+                  }
+                }
+                """.formatted(new ObjectMapper().writeValueAsString(skillMd)));
+
+            // language=JSON
+            var acmeRead = client.post("""
+                {"jsonrpc":"2.0","id":6,"method":"resources/read","params":{"uri":"skill://acme/git-workflow/SKILL.md"}}
+                """);
+            // language=JSON
+            assertThatJson(acmeRead.body()).isEqualTo("""
+                {
+                  "jsonrpc":"2.0",
+                  "id":6,
+                  "result":{
+                    "contents":[{
+                      "uri":"skill://acme/git-workflow/SKILL.md",
+                      "mimeType":"text/markdown",
+                      "text":%s
+                    }],
+                    "resultType":"complete",
+                    "ttlMs":0,
+                    "cacheScope":"public"
+                  }
+                }
+                """.formatted(new ObjectMapper().writeValueAsString(skillMd)));
+        }
+    }
+
+    @Test
+    void sameNamedSkillsUnderDifferentNamespacesAreBothListedAndReadableOn20251125() throws Exception {
+        var gitWorkflowDir = filesystemSkillsDir.resolve("git-workflow");
+        try (final var server = startServer(SkillsExtension.builder()
+                        .registry(new FilesystemSkillsRegistry(gitWorkflowDir, "team/git-workflow"))
+                        .registry(new FilesystemSkillsRegistry(gitWorkflowDir, "acme/git-workflow"))
+                        .build());
+                final var client = new Mcp20251125Client(server.port())) {
+            client.initialize();
+
+            // language=JSON
+            var list = client.sendRpc("""
+                {"jsonrpc":"2.0","id":1,"method":"resources/list","params":{}}
+                """);
+
+            // language=JSON
+            assertThatJson(list).isEqualTo("""
+                {
+                  "jsonrpc":"2.0",
+                  "id":1,
+                  "result":{
+                    "resources":[
+                      {
+                        "uri":"skill://acme/git-workflow/references/BRANCHING.md",
+                        "name":"acme/git-workflow/references/BRANCHING.md",
+                        "mimeType":"text/markdown"
+                      },
+                      {
+                        "uri":"skill://acme/git-workflow/SKILL.md",
+                        "name":"git-workflow",
+                        "description":"Follow this team's Git conventions for branching and commits",
+                        "mimeType":"text/markdown"
+                      },
+                      {
+                        "uri":"skill://team/git-workflow/SKILL.md",
+                        "name":"git-workflow",
+                        "description":"Follow this team's Git conventions for branching and commits",
+                        "mimeType":"text/markdown"
+                      },
+                      {
+                        "uri":"skill://team/git-workflow/references/BRANCHING.md",
+                        "name":"team/git-workflow/references/BRANCHING.md",
+                        "mimeType":"text/markdown"
+                      }
+                    ]
+                  }
+                }
+                """);
+
+            var skillMd = Files.readString(gitWorkflowDir.resolve("SKILL.md"));
+
+            // language=JSON
+            var acmeRead = client.sendRpc("""
+                {"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"skill://acme/git-workflow/SKILL.md"}}
+                """);
+            // language=JSON
+            assertThatJson(acmeRead).isEqualTo("""
+                {
+                  "jsonrpc":"2.0",
+                  "id":2,
+                  "result":{
+                    "contents":[{
+                      "uri":"skill://acme/git-workflow/SKILL.md",
+                      "mimeType":"text/markdown",
+                      "text":%s
+                    }]
+                  }
+                }
+                """.formatted(new ObjectMapper().writeValueAsString(skillMd)));
+
+            // language=JSON
+            var teamRead = client.sendRpc("""
+                {"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"skill://team/git-workflow/SKILL.md"}}
+                """);
+            // language=JSON
+            assertThatJson(teamRead).isEqualTo("""
+                {
+                  "jsonrpc":"2.0",
+                  "id":3,
+                  "result":{
+                    "contents":[{
+                      "uri":"skill://team/git-workflow/SKILL.md",
+                      "mimeType":"text/markdown",
+                      "text":%s
+                    }]
+                  }
+                }
+                """.formatted(new ObjectMapper().writeValueAsString(skillMd)));
         }
     }
 
@@ -380,7 +682,7 @@ class SkillsExtensionE2eTest {
     }
 
     @Test
-    void methodsHiddenUntilExtensionDeclared() throws Exception {
+    void skillResourcesRemainAvailableWhenExtensionMethodsAreHidden() throws Exception {
         try (final var server = startServer(SkillsExtension.builder()
                         .registry(new ClasspathSkillsRegistry("skills"))
                         .build());
@@ -395,31 +697,109 @@ class SkillsExtensionE2eTest {
                 """);
 
             // language=JSON
-            var read = client.post("""
-                {"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"skill://git-workflow/SKILL.md"}}
+            var get = client.post("""
+                {"jsonrpc":"2.0","id":2,"method":"skills/get","params":{"uri":"skill://pdf-processing/SKILL.md"}}
                 """);
             // language=JSON
-            assertThatJson(read.body()).isEqualTo("""
-                {"jsonrpc":"2.0","id":2,"error":{"code":-32602,"message":"Resource not found", "data":{"uri":"skill://git-workflow/SKILL.md"}}}
+            assertThatJson(get.body()).isEqualTo("""
+                {"jsonrpc":"2.0","id":2,"error":{"code":-32601,"message":"Method not found"}}
                 """);
 
             // language=JSON
+            var directory = client.post("""
+                {"jsonrpc":"2.0","id":3,"method":"resources/directory/read","params":{"uri":"skill://pdf-processing"}}
+                """);
+            // language=JSON
+            assertThatJson(directory.body()).isEqualTo("""
+                {"jsonrpc":"2.0","id":3,"error":{"code":-32601,"message":"Method not found"}}
+                """);
+
+            // language=JSON
+            var read = client.post("""
+                {"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"skill://pdf-processing/SKILL.md"}}
+                """);
+            // language=JSON
+            assertThatJson(read.body()).isEqualTo("""
+                {
+                  "jsonrpc":"2.0",
+                  "id":4,
+                  "result":{
+                    "contents":[{
+                      "uri":"skill://pdf-processing/SKILL.md",
+                      "mimeType":"text/markdown",
+                      "text":%s
+                    }],
+                    "resultType":"complete",
+                    "ttlMs":0,
+                    "cacheScope":"public"
+                  }
+                }
+                """.formatted(new ObjectMapper().writeValueAsString(PDF_SKILL)));
+
+            // language=JSON
             var resources = client.post("""
-                {"jsonrpc":"2.0","id":3,"method":"resources/list","params":{}}
+                {"jsonrpc":"2.0","id":5,"method":"resources/list","params":{}}
                 """);
             // language=JSON
             assertThatJson(resources.body()).isEqualTo("""
                 {
                   "jsonrpc":"2.0",
-                  "id":3,
+                  "id":5,
                   "result":{
-                    "resources":[],
+                    "resources":[
+                      {
+                        "uri":"skill://pdf-processing/SKILL.md",
+                        "name":"pdf-processing",
+                        "description":"Extract, fill, and assemble PDF documents",
+                        "mimeType":"text/markdown"
+                      },
+                      {
+                        "uri":"skill://pdf-processing/scripts/extract.py",
+                        "name":"pdf-processing/scripts/extract.py",
+                        "mimeType":"text/plain"
+                      },
+                      {
+                        "uri":"skill://pdf-processing/templates/invoice.md",
+                        "name":"pdf-processing/templates/invoice.md",
+                        "mimeType":"text/markdown"
+                      }
+                    ],
                     "resultType":"complete",
                     "ttlMs":0,
                     "cacheScope":"public"
                   }
                 }
                 """);
+        }
+    }
+
+    @Test
+    void skillResourceRemainsReadableOnLegacyProtocolWithoutExtensionNegotiation() throws Exception {
+        try (final var server = startServer(SkillsExtension.builder()
+                        .registry(new ClasspathSkillsRegistry("skills"))
+                        .build());
+                final var client = new Mcp20251125Client(server.port())) {
+            client.initialize();
+
+            // language=JSON
+            var read = client.sendRpc("""
+                {"jsonrpc":"2.0","id":2,"method":"resources/read","params":{"uri":"skill://pdf-processing/SKILL.md"}}
+                """);
+
+            // language=JSON
+            assertThatJson(read).isEqualTo("""
+                {
+                  "jsonrpc":"2.0",
+                  "id":2,
+                  "result":{
+                    "contents":[{
+                      "uri":"skill://pdf-processing/SKILL.md",
+                      "mimeType":"text/markdown",
+                      "text":%s
+                    }]
+                  }
+                }
+                """.formatted(new ObjectMapper().writeValueAsString(PDF_SKILL)));
         }
     }
 
@@ -521,17 +901,20 @@ class SkillsExtensionE2eTest {
         assertThat(loadedBytes).as("content of %s", uri).isEqualTo(actualBytes);
         assertThat(sha256(loadedBytes)).as("digest of %s", uri).isEqualTo(expectedDigest);
 
-        assertThat(resource.path("name").asString()).as("name of %s", uri).isEqualTo(relativePath);
         assertThat(resource.path("mimeType").asString())
                 .as("mimeType of %s", uri)
                 .isEqualTo(MimeTypes.guess(relativePath));
 
         if (relativePath.endsWith("/SKILL.md")) {
             var frontmatter = FrontmatterParser.parse(actualBytes);
+            assertThat(resource.path("name").asString())
+                    .as("name of %s", uri)
+                    .isEqualTo(String.valueOf(frontmatter.get("name")));
             assertThat(resource.path("description").asString())
                     .as("description of %s", uri)
                     .isEqualTo(String.valueOf(frontmatter.get("description")));
         } else {
+            assertThat(resource.path("name").asString()).as("name of %s", uri).isEqualTo(relativePath);
             assertThat(resource.has("description"))
                     .as("no description for %s", uri)
                     .isFalse();

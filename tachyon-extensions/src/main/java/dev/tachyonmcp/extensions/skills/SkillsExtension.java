@@ -27,11 +27,14 @@ import org.jspecify.annotations.Nullable;
  * MCP <a href="https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640">SEP-2640</a>
  * skills extension: serves Agent Skills as {@code skill://} resources and answers
  * {@code skills/list}, {@code skills/get}, and {@code resources/directory/read}.
+ * Skill files remain available through the base {@code resources/list} and {@code resources/read}
+ * methods when the client has not negotiated this extension; only the extension methods require
+ * negotiation.
  *
  * <pre>{@code
  * TachyonServer.builder()
  *         .withExtensions(SkillsExtension.builder()
- *                 .registry(new PathSkillsRegistry(Path.of("skills")))
+ *                 .registry(new FilesystemSkillsRegistry(Path.of("skills")))
  *                 .registry(new ClasspathSkillsRegistry("bundled-skills"))
  *                 .build())
  *         .build();
@@ -87,19 +90,22 @@ public final class SkillsExtension implements ServerExtension {
     }
 
     /**
-     * Registers every skill file as an extension-owned resource and the {@code skills/list},
+     * Registers every skill file as a base MCP resource and the {@code skills/list},
      * {@code skills/get}, and {@code resources/directory/read} methods.
      */
     @Override
     public void bootstrap(ExtensionContext server) {
         for (var skill : skillsByPath.values()) {
             for (var file : skill.files()) {
+                var isSkillManifest = file.relativePath().equals("SKILL.md");
                 var descriptor = ResourceDescriptor.builder()
-                        .name(skill.skillPath() + "/" + file.relativePath())
+                        .name(
+                                isSkillManifest
+                                        ? String.valueOf(skill.frontmatter().get("name"))
+                                        : skill.skillPath() + "/" + file.relativePath())
                         .uri(file.uri())
-                        .mimeType(file.mimeType())
-                        .extensionId(ID);
-                if (file.relativePath().equals("SKILL.md")) {
+                        .mimeType(file.mimeType());
+                if (isSkillManifest) {
                     descriptor.description(String.valueOf(skill.frontmatter().get("description")));
                 }
                 server.resources().register(descriptor.build(), (context, request) -> contents(file));
@@ -220,6 +226,7 @@ public final class SkillsExtension implements ServerExtension {
             var resource = new LinkedHashMap<String, Object>();
             resource.put("uri", file.uri());
             resource.put("digest", file.digest());
+            resource.put("size", file.size());
             resources.add(resource);
         }
         var entry = new LinkedHashMap<String, Object>();

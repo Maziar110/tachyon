@@ -2,6 +2,7 @@
 package dev.tachyonmcp.extensions.skills;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.tachyonmcp.api.server.domain.RequestId;
 import dev.tachyonmcp.api.server.features.resources.ResourceDescriptor;
@@ -41,13 +42,13 @@ class SkillsExtensionTest {
     }
 
     @Test
-    void registersEverySkillFileAsExtensionOwnedResource() {
+    void registersEverySkillFileAsBaseResource() {
         var descriptors = server.resources().descriptors();
         assertThat(descriptors)
                 .extracting(ResourceDescriptor::uri)
                 .contains("skill://pdf-processing/scripts/extract.py", "skill://pdf-processing/templates/invoice.md");
         assertThat(descriptors)
-                .allSatisfy(descriptor -> assertThat(descriptor.extensionId()).isEqualTo(SkillsExtension.ID));
+                .allSatisfy(descriptor -> assertThat(descriptor.extensionId()).isNull());
         assertThat(server.resources().findByUri("skill://pdf-processing/SKILL.md"))
                 .get()
                 .extracting(ResourceDescriptor::description)
@@ -64,6 +65,18 @@ class SkillsExtensionTest {
                 .get()
                 .extracting(ResourceDescriptor::mimeType)
                 .isEqualTo("text/markdown");
+    }
+
+    @Test
+    void rejectsDuplicateSkillPathAtConfiguration() {
+        var gitWorkflowDir = SkillTestFixtures.filesystemSkillsDir.resolve("git-workflow");
+        var builder = SkillsExtension.builder()
+                .registry(new FilesystemSkillsRegistry(gitWorkflowDir, "git-workflow"))
+                .registry(new FilesystemSkillsRegistry(gitWorkflowDir, "git-workflow"));
+
+        assertThatThrownBy(builder::build)
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("git-workflow");
     }
 
     @Test
