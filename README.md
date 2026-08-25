@@ -15,156 +15,96 @@
   />
 </div>
 
-**Tachyon MCP** is a production [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server runtime for Java.
+**Tachyon MCP** is a Java 21+ server runtime for the
+[Model Context Protocol](https://modelcontextprotocol.io). It implements MCP 2025-11-25 and
+2026-07-28 over Streamable HTTP and passes the official conformance suites for both versions.
 
-Runs on Java 21+ with [Netty](https://netty.io), virtual threads, Kotlin API. No framework required. Implements **MCP 2025-11-25** and **MCP 2026-07-28** over Streamable HTTP and runs stateless by default. **It passes all official conformance tests for both protocol versions!**
+Build servers with synchronous Java handlers or a coroutine-first Kotlin DSL. Tachyon runs
+blocking handlers on virtual threads, keeps them off the Netty event loop, and requires no
+application framework.
 
-## 💫 Why Tachyon?
+## Why Tachyon?
 
-🧵 **Synchronous code, asynchronous runtime** — write blocking handlers; Java virtual threads run them off the Netty event loop. No thread pools, reactive pipelines, or `CompletableFuture` boilerplate. Coroutine-first Kotlin DSL included.
+- **Simple handlers** -- write blocking Java code or suspending Kotlin code without reactive
+  pipelines or manual thread pools.
+- **Stable application API** -- protocol-version mappers isolate handlers from wire-format changes.
+- **Java annotations support** -- adapt existing mcp-java, LangChain4j, or Spring AI annotated services into Tachyon MCP servers.
+- **Stateless by default** -- opt into sessions only when you need resumable SSE, event replay, and
+  TTL cleanup.
+- **Production transport** -- Netty backpressure, graceful shutdown, DNS-rebinding protection,
+  CORS, and native transport auto-detection (`io_uring` → `epoll` → `kqueue` → NIO).
 
-🛡️ **Stable APIs across spec changes** — domain types (`ToolFn`, `ResourceFn`, `PromptFn`, tasks) sit behind an internal protocol mapper. Spec upgrades change the mapper, not your handlers.
+## Quickstart
 
-☁️ **Stateless by default** — scale without session affinity on containers and serverless runtimes.
-AWS Lambda needs an adapter that supports a listening HTTP server and long-lived SSE responses.
-Opt into sessions for SSE resumability, `Last-Event-ID` replay, and TTL cleanup.
+Add the core dependency:
 
-🚄 **Production transport** — Netty with backpressure, graceful shutdown, DNS rebinding protection, and native transport auto-detection (`io_uring` → `epoll` → `kqueue` → NIO).
+```xml
+<dependency>
+    <groupId>dev.tachyonmcp</groupId>
+    <artifactId>tachyon-core</artifactId>
+    <version>${tachyon.version}</version>
+</dependency>
+```
 
-## TL;DR
+Create and start a server:
 
-1. Add dependency:
+```java
+import dev.tachyonmcp.api.server.features.tools.ToolResult;
+import dev.tachyonmcp.core.server.TachyonServer;
 
-    ```xml
-    <dependency>
-        <groupId>dev.tachyonmcp</groupId>
-        <artifactId>tachyon-core</artifactId>
-        <version>1.0.0-beta.22</version>
-    </dependency>
-    ```
-
-2. Create MCP server:
-
-    ```java
-    import dev.tachyonmcp.core.server.TachyonServer;
-    import dev.tachyonmcp.api.server.features.tools.ToolResult;
-
-    public class WeatherMcpServer {
-        public static void main(String... args) {
-            var server = TachyonServer.builder()
-                .name("weather-mcp")
-                .withTools(tools -> tools.register(
-                        b -> b.name("get_forecast")
-                            .description("Get weather forecast")
-                            .inputSchema("""
-                            {"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}
-                            """),
-                        (ctx, request) -> ToolResult.text("☀️ 22°C")))
-                .port(8080)
-                .build();
-            server.start();
-        }
+public class WeatherMcpServer {
+    public static void main(String... args) {
+        var server = TachyonServer.builder()
+            .name("weather-mcp")
+            .withTools(tools -> tools.register(
+                tool -> tool.name("get_forecast")
+                    .description("Get weather forecast")
+                    .inputSchema("""
+                        {"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}
+                        """),
+                (context, request) -> ToolResult.text("☀️ 22°C")))
+            .port(8080)
+            .build();
+        server.start();
     }
-    ```
+}
+```
 
-## Documentation
+See the [quickstart](docs/quickstart.md) for Java and Kotlin examples plus a `curl` test.
 
-- [Quickstart](docs/quickstart.md) - Build a working server in 5 minutes
-- [Configuration](docs/configuration.md) - Network, I/O engine (native transports), sessions, CORS
-- [Tools](docs/tools.md) - Sync/async handlers, input schema, `ToolResult`
-- [Resources](docs/resources.md) - Static URIs, dynamic handlers, URI templates
-- [Tasks](docs/tasks.md) - Long-running operations, state machine, `TasksExtension`
-- [Extensions](docs/extensions.md) - Custom protocol extensions, negotiation
-- [FAQ](docs/faq.md) - Java, frameworks, concurrency, deployment, and compatibility
-- [Kotlin DSL](docs/kotlin.md) - Coroutine-first DSL, `TachyonServer { }`, scope reference
-- [Testkit](docs/testkit.md) - Test harness: shaping clients, dynamic-port servers, fluent JSON-RPC assertions
-- [Examples](examples/README.md) - Runnable Java & Kotlin example servers
-- [Migrate from Kotlin MCP SDK](docs/migrate-from-kotlin-mcp-to-tachyon.md) - Moving an existing Kotlin MCP SDK server
-  to Tachyon
+## Implemented features
 
-## Agent Skill
+| Area | Support |
+|---|---|
+| **MCP surface** | Tools, resources and templates, prompts, completions, logging, sampling, form/URL elicitation, cancellation, subscriptions, pagination, and progress notifications |
+| **Annotations** | Optional adapters for [mcp-java, LangChain4j, and Spring AI](docs/annotations.md), mapped onto Tachyon's standard registries |
+| **Tasks** | Full `tasks/*` lifecycle, state validation, status notifications, retention, and `TasksExtension` for [SEP-1686](docs/tasks.md) |
+| **Agent Skills** | `SkillsExtension` implements the [SEP-2640](docs/extensions/mcp-skills.md) draft: filesystem/classpath registries, `skill://` resources, `skills/list`, `skills/get`, and directory reads |
+| **Extensions** | [SEP-2133](docs/extensions.md) negotiation, custom JSON-RPC methods, capability advertisement, and extension-gated features |
+| **Runtime** | Stateless or resumable sessions, `Last-Event-ID` replay, pluggable stores, virtual-thread handlers, request timeouts, and graceful draining |
+| **Java and Kotlin** | Independent sync/async Java contracts and a coroutine-first [Kotlin DSL](docs/kotlin.md) |
+| **Testing** | Official conformance suites plus a [testkit](docs/testkit.md) for dynamic servers and fluent JSON-RPC assertions |
 
-Add agent skill to write better code using this SDK:
+## Documentation and examples
+
+- [Configuration](docs/configuration.md) -- network, native I/O, sessions, CORS, and runtime limits
+- [Tools](docs/tools.md), [resources](docs/resources.md), and [tasks](docs/tasks.md) -- feature APIs and examples
+- [Annotations](docs/annotations.md) -- mcp-java, LangChain4j, and Spring AI providers
+- [Extensions](docs/extensions.md) and [MCP Skills](docs/extensions/mcp-skills.md) -- custom protocol methods and SEP support
+- [Kotlin DSL](docs/kotlin.md) -- builders, scopes, and suspending handlers
+- [Examples](examples/README.md) -- runnable Java and Kotlin servers
+- [FAQ](docs/faq.md) -- frameworks, concurrency, deployment, and compatibility
+
+## Coding-agent skill
+
+This repository also includes a skill that teaches coding agents how to build Tachyon servers. It
+is separate from the server-side `SkillsExtension` described above.
 
 ```shell
 npx skills add kpavlov/tachyon --skill tachyon-mcp
 ```
 
-The skill includes compilable Java and Kotlin example sources under `.agents/skills/tachyon-mcp/resources/`.
-They are compiled as extra source roots of the `e2e` module during `mvn test` to keep them valid.
-
-Check out [Skills CLI](https://github.com/vercel-labs/skills) for more options.
-
-## Features
-
-Full MCP surface over Streamable HTTP, verified by the official conformance suites for **2025-11-25** and **2026-07-28**:
-
-The wire lifecycle varies by negotiated version; the detailed method list below describes the
-2025-11-25 surface unless noted otherwise.
-
-| Area | What you get |
-|---|---|
-| **Tools** | Sync & async handlers, JSON Schema 2020-12 input/output validation, `outputSchema`, annotations, per-tool `taskSupport`, `list_changed` |
-| **Resources** | Static + dynamic handlers, URI templates, subscribe/unsubscribe with `updated` notifications, text & blob content |
-| **Prompts** | List/get with resolver handlers, input-required (MRTR) flow, `list_changed` |
-| **Tasks** | Full `tasks/*` lifecycle with enforced state machine, status broadcast, stale-task janitor, `TasksExtension` (SEP-1686) |
-| **Client calls** | `sampling/createMessage`, elicitation (form **and** URL modes), client-initiated `cancelled` |
-| **Sessions** | Stateless by default; opt-in SSE resumability, `Last-Event-ID` replay, TTL janitor, pluggable store/ID generator |
-| **Transport** | Native transport auto-detect, backpressure watermarks, graceful drain-on-shutdown, CORS + origin/DNS-rebinding protection |
-| **Extensions** | Negotiable protocol extensions (SEP-2133) with extension-gated tool visibility |
-
-<details>
-<summary>Detailed method-by-method breakdown</summary>
-
-**Core** — JSON-RPC 2.0; Streamable HTTP (POST/GET-SSE/DELETE/OPTIONS); lifecycle `initialize → initialized → ACTIVE`; cursor pagination on all list methods; strict `Accept` validation (406); pending-request timeout.
-
-**Tools** — `tools/list` (paginated), `tools/call` (`isError`), `outputSchema` + `annotations`, sync/async handlers, name validation ([SEP-986](https://modelcontextprotocol.io/seps/986-specify-format-for-tool-names)), inline notifications/logging mid-call, JSON Schema 2020-12 validation ([SEP-1613](https://modelcontextprotocol.io/seps/1613-establish-json-schema-2020-12-as-default-dialect-f)), `notifications/tools/list_changed`.
-
-**Resources** — `resources/list`, `resources/read` (text & blob), `resources/templates/list`, `subscribe`/`unsubscribe`, `list_changed` + `updated` notifications, dynamic `ResourceFn`.
-
-**Prompts** — `prompts/list` (paginated), `prompts/get`, input-required flow, `list_changed`.
-
-**Tasks** — `tasks/list|get|cancel|result`; state machine `SUBMITTED → WORKING → INPUT_REQUIRED → COMPLETED/FAILED/CANCELLED` (+ `REJECTED`/`AUTH_REQUIRED`); `notifications/tasks/status` on every transition; stale-task janitor; per-tool `execution.taskSupport`; `TasksExtension` ([SEP-1686](https://modelcontextprotocol.io/seps/1686-tasks)) exposing `create_task` + `task://{id}`, hidden from clients that don't negotiate it.
-
-**Logging & client calls** — `logging/setLevel` per session, `notifications/message` above threshold, progress notifications; `sampling/createMessage`; elicitation form + URL modes; client-initiated `notifications/cancelled`.
-
-**Transport & sessions** — Netty 4.2, `io_uring`/`epoll`/`kqueue`/NIO auto-detect, platform-thread event loops + virtual-thread handlers, writability backpressure, configurable idle timeouts; stateless or in-memory sessions, 5s janitor / 30s TTL, SSE disconnect survives (event-log replay on reconnect), graceful drain (`shutdownGracePeriod`, default 5s) before force-interrupt.
-
-</details>
-
----
-
-## Quick Start
-
-See [docs/quickstart.md](docs/quickstart.md) for a full walkthrough with Java and Kotlin examples, curl test, and next-step links.
-
-### TasksExtension (SEP-1686)
-
-```java
-var server = TachyonServer.builder()
-    .withExtensions(TasksExtension.instance())  // exposes create_task tool + task://{id} resource
-    .port(8080)
-    .build();
-server.start();
-```
-
-MCP 2025-11-25 clients that include `"extensions": {"io.modelcontextprotocol/tasks": {}}` in their `initialize` capabilities receive the extension's tool and resource template. Clients that don't negotiate it see standard `tasks/*` methods. See [docs/tasks.md](docs/tasks.md).
-
-### Protocol isolation
-
-Function interfaces (`ToolFn`/`AsyncToolFn`, `ResourceFn`/`AsyncResourceFn`,
-`PromptFn`/`AsyncPromptFn`, and `CompletionFn`/`AsyncCompletionFn`) and descriptor types use stable
-domain types. Sync and async functions are independent contracts. When Tachyon upgrades to a new
-protocol version, only the internal mapper layer changes.
-
-## Performance
-
-- **Native transports** — `io_uring` → `epoll` → `kqueue` → NIO auto-detect
-- **Write-buffer watermarks** — 32 KB low / 128 KB high, backpressure wired end to end
-- **Batch flushing** — `ctx.write()` accumulates, one `ctx.flush()` per boundary
-- **Sharable handlers** — `@Sharable` pipeline handlers, no per-request allocation
-- **Virtual threads** — handlers offloaded from the event loop, no manual pools
-- **Streaming JSON-RPC** — Jackson streaming codec, no or limited `ObjectMapper` tree round-trips
+Its Java and Kotlin examples are compiled during the project build to keep them current.
 
 ## License
 
