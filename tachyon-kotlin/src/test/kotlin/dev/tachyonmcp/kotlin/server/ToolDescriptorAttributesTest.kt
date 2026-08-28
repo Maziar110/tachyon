@@ -3,6 +3,7 @@ package dev.tachyonmcp.kotlin.server
 
 import dev.tachyonmcp.api.json.JsonSchema
 import dev.tachyonmcp.api.server.domain.ToolAnnotations
+import dev.tachyonmcp.api.server.features.tasks.TaskConnector
 import dev.tachyonmcp.api.server.features.tasks.TaskSupport
 import dev.tachyonmcp.kotlin.server.domain.Icon
 import dev.tachyonmcp.kotlin.server.features.tools.toolDescriptor
@@ -26,6 +27,9 @@ internal class ToolDescriptorAttributesTest {
         val toolAnnotations = ToolAnnotations.builder().readOnlyHint(true).build()
 
         buildServer {
+            capabilities {
+                tasks(DescriptorTaskConnector)
+            }
             tool(
                 name = "build-time",
                 description = "desc",
@@ -83,3 +87,11 @@ internal class ToolDescriptorAttributesTest {
         descriptor.extensionId() shouldBe "ext"
     }
 }
+
+internal val DescriptorTaskConnector: TaskConnector =
+    TaskConnector
+        .builder()
+        .get { _, _ -> error("unused") }
+        .cancel { _, _ -> }
+        .update { _, _ -> }
+        .build()

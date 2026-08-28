@@ -1,7 +1,9 @@
 // Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors.
 package dev.tachyonmcp.kotlin.server.config
 
+import dev.tachyonmcp.api.annotations.ExperimentalApi
 import dev.tachyonmcp.api.server.config.Mode
+import dev.tachyonmcp.api.server.features.tasks.TaskConnector
 import dev.tachyonmcp.core.server.config.CapabilitiesConfig
 import dev.tachyonmcp.core.server.config.FeatureConfig
 import dev.tachyonmcp.core.server.config.ResourcesConfig
@@ -51,10 +53,20 @@ public class CapabilitiesScope
             promptsConfig = FeatureScope().apply(configure).toConfig()
         }
 
+        /**
+         * Enables task support with the supplied external [TaskConnector].
+         *
+         * @param connector system that owns task execution
+         * @param configure additional task capability configuration
+         */
         @OptIn(ExperimentalContracts::class)
-        public inline fun tasks(configure: (@TachyonDsl TasksScope).() -> Unit) {
+        @ExperimentalApi
+        public inline fun tasks(
+            connector: TaskConnector,
+            configure: (@TachyonDsl TasksScope).() -> Unit = {},
+        ) {
             contract { callsInPlace(configure, InvocationKind.EXACTLY_ONCE) }
-            tasksConfig = TasksScope().apply(configure).toConfig()
+            tasksConfig = TasksScope(connector).apply(configure).toConfig()
         }
 
         @PublishedApi

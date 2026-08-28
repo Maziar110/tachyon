@@ -467,20 +467,6 @@ internal class KotlinApiTest {
     }
 
     @Test
-    fun `ToolScope task delegates to request task`() {
-        withStatelessContext { ctx ->
-            val request =
-                ToolRequest
-                    .builder()
-                    .name("t")
-                    .arguments(Args.of(null, null))
-                    .build()
-            val scope = ToolScope(ctx, request = request)
-            scope.task shouldBe null
-        }
-    }
-
-    @Test
     fun `ToolScope fail returns a failed ToolResult with the message`() {
         withStatelessContext { ctx ->
             val request =
@@ -599,6 +585,9 @@ internal class KotlinApiTest {
     fun `tool builder sets taskSupport on the registered descriptor`() {
         TachyonServer(port = 0) {
             name("task-support-test")
+            capabilities {
+                tasks(DescriptorTaskConnector)
+            }
             tool("t-task", taskSupport = TaskSupport.OPTIONAL) {
                 ToolResult.text("ok")
             }

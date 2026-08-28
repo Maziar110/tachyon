@@ -2,8 +2,8 @@
 package dev.tachyonmcp.core.protocol.mcp.v2026_07_28.codecs;
 
 import dev.tachyonmcp.api.server.domain.TaskResult;
+import dev.tachyonmcp.api.server.features.tasks.TaskSnapshot;
 import dev.tachyonmcp.api.server.features.tasks.TaskState;
-import dev.tachyonmcp.core.server.features.tasks.TaskEntry;
 import dev.tachyonmcp.core.server.json.JsonUtils;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -20,9 +20,11 @@ import tools.jackson.databind.JsonNode;
  * a {@code "task"} key), and {@code tasks/cancel} returning an empty acknowledgement rather than
  * the full task state.
  *
- * <p>{@code SUBMITTED} maps to {@code "submitted"} and {@code UNKNOWN} to {@code "unknown"} — two
- * states 2025-11-25 cannot express on the wire (it folds {@code SUBMITTED} to {@code "working"}
- * and throws on {@code UNKNOWN}).
+ * <p>The wire status enum has exactly five values: {@code working}, {@code input_required},
+ * {@code completed}, {@code failed}, {@code cancelled} (per the current tasks extension spec —
+ * {@code submitted} and {@code unknown} are not wire values). {@link TaskState#SUBMITTED} folds to
+ * {@code "working"}. A2A-only states without an MCP representation are rejected instead of being
+ * serialized as an invalid status-specific payload.
  */
 final class McpTaskMapper {
 
@@ -33,28 +35,28 @@ final class McpTaskMapper {
 
     static String toWireStatus(TaskState status) {
         return switch (status) {
-            case SUBMITTED -> "submitted";
-            case WORKING -> "working";
+            case SUBMITTED, WORKING -> "working";
             case INPUT_REQUIRED -> "input_required";
             case COMPLETED -> "completed";
             case CANCELLED -> "cancelled";
-            case REJECTED, AUTH_REQUIRED, FAILED -> "failed";
-            case UNKNOWN -> "unknown";
+            case FAILED -> "failed";
+            case REJECTED, AUTH_REQUIRED, UNKNOWN ->
+                throw new UnsupportedOperationException("Task state cannot be projected to MCP: " + status);
         };
     }
 
-    static JsonNode toCreateTaskResult(TaskEntry entry) {
-        var fields = taskFields(entry, toWireStatus(entry.status()));
+    static JsonNode toCreateTaskResult(TaskSnapshot snapshot) {
+        var fields = taskFields(snapshot, effectiveWireStatus(snapshot));
         fields.put("resultType", RESULT_TYPE_TASK);
         return JsonUtils.toObjectNode(fields);
     }
 
     static JsonNode toGetTaskResult(
-            TaskEntry entry,
+            TaskSnapshot snapshot,
             @Nullable JsonNode inlineResult,
             @Nullable JsonNode inlineError,
             @Nullable JsonNode inputRequests) {
-        var fields = taskFields(entry, effectiveWireStatus(entry));
+        var fields = taskFields(snapshot, effectiveWireStatus(snapshot));
         putIfPresent(fields, "result", inlineResult);
         putIfPresent(fields, "error", inlineError);
         putIfPresent(fields, "inputRequests", inputRequests);
@@ -67,41 +69,51 @@ final class McpTaskMapper {
         return JsonUtils.toObjectNode(Map.of("resultType", RESULT_TYPE_COMPLETE));
     }
 
-    static JsonNode toStatusNotification(TaskEntry entry) {
-        return JsonUtils.toObjectNode(taskFields(entry, effectiveWireStatus(entry)));
+    static JsonNode toStatusNotification(
+            TaskSnapshot snapshot,
+            @Nullable JsonNode inlineResult,
+            @Nullable JsonNode inlineError,
+            @Nullable JsonNode inputRequests) {
+        var fields = taskFields(snapshot, effectiveWireStatus(snapshot));
+        putIfPresent(fields, "result", inlineResult);
+        putIfPresent(fields, "error", inlineError);
+        putIfPresent(fields, "inputRequests", inputRequests);
+        return JsonUtils.toObjectNode(fields);
     }
 
     /**
      * A tool result that completed with {@code isError: true} is a normal {@code completed}
      * outcome, not a task failure: "This status MUST NOT be used for non-JSON-RPC errors ...
      * errors within the context of a protocol method result MUST use the completed status." Only
-     * a {@link TaskResult.Failed} carrying a {@code protocolError} is a genuine JSON-RPC failure.
+     * a {@link TaskResult.Failed}, which always carries a genuine protocol {@link
+     * dev.tachyonmcp.api.server.domain.ServerError}, maps to {@code "failed"}.
      */
-    private static String effectiveWireStatus(TaskEntry entry) {
-        if (entry.result() instanceof TaskResult.Failed failed && failed.protocolError() == null) {
-            return "completed";
-        }
-        return toWireStatus(entry.status());
+    private static String effectiveWireStatus(TaskSnapshot snapshot) {
+        return switch (snapshot.result()) {
+            case TaskResult.Completed c -> "completed";
+            case TaskResult.Failed f -> "failed";
+            case null -> toWireStatus(snapshot.status());
+        };
     }
 
-    private static Map<String, Object> taskFields(TaskEntry entry, String wireStatus) {
+    private static Map<String, Object> taskFields(TaskSnapshot snapshot, String wireStatus) {
         var fields = new LinkedHashMap<String, Object>();
-        putMeta(fields, entry);
-        fields.put("taskId", entry.id());
+        putMeta(fields, snapshot);
+        fields.put("taskId", snapshot.taskId());
         fields.put("status", wireStatus);
-        putIfPresent(fields, "statusMessage", entry.statusMessage());
-        fields.put("createdAt", entry.createdAt());
-        fields.put("lastUpdatedAt", entry.lastUpdatedAt());
+        putIfPresent(fields, "statusMessage", snapshot.statusMessage());
+        fields.put("createdAt", snapshot.createdAt());
+        fields.put("lastUpdatedAt", snapshot.lastUpdatedAt());
         // SEP-2663 types Task.ttlMs as `number | null` (required, nullable) but
         // Task.pollIntervalMs as `number?` (optional) -- ttlMs is always written, even when null;
         // pollIntervalMs is omitted rather than written as null.
-        fields.put("ttlMs", entry.ttlMillis());
-        putIfPresent(fields, "pollIntervalMs", pollIntervalMillis(entry.pollInterval()));
+        fields.put("ttlMs", durationMillis(snapshot.ttl()));
+        putIfPresent(fields, "pollIntervalMs", durationMillis(snapshot.pollInterval()));
         return fields;
     }
 
-    private static void putMeta(Map<String, Object> target, TaskEntry entry) {
-        var meta = entry.meta();
+    private static void putMeta(Map<String, Object> target, TaskSnapshot snapshot) {
+        var meta = snapshot.meta();
         if (meta != null && !meta.isEmpty()) {
             target.put("_meta", meta);
         }
@@ -113,7 +125,7 @@ final class McpTaskMapper {
         }
     }
 
-    private static @Nullable Long pollIntervalMillis(@Nullable Duration pollInterval) {
-        return pollInterval != null ? pollInterval.toMillis() : null;
+    private static @Nullable Long durationMillis(@Nullable Duration duration) {
+        return duration != null ? duration.toMillis() : null;
     }
 }

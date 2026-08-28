@@ -1,58 +1,67 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.core.server.config;
 
+import dev.tachyonmcp.api.annotations.ExperimentalApi;
+import dev.tachyonmcp.api.server.features.tasks.TaskConnector;
 import dev.tachyonmcp.core.server.features.Pagination;
 import java.time.Duration;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Configuration for the tasks capability. Fields map 1:1 to the MCP {@code tasks} capability
- * object ({@code tasks.list}, {@code tasks.cancel}, {@code tasks.requests.tools.call}).
+ * Configuration for the tasks capability.
  *
  * @param enabled      whether the {@code tasks} capability is advertised at all (default
  *                     {@code false}); the capability is also advertised, regardless of this flag,
  *                     when a registered tool supports task augmentation
- * @param list         whether {@code tasks/list} is exposed (default {@code false})
- * @param cancel       whether {@code tasks/cancel} is supported (default {@code false})
- * @param requests     whether task-augmented {@code tools/call} requests are accepted
- *                     (default {@code false})
+ * @param connector    connector to the system that owns task execution; modern operations are
+ *                     required, while legacy list/result support is read from the connector
  * @param pageSize     default page size when a list request omits its limit
- * @param keepAlive    default retention window for a terminal task's result before it's dropped
- *                     from memory (default 5 minutes); overridable per task via
- *                     {@code TaskOptions.keepAlive()}
+ * @param keepAlive    default retention window for a terminal task's cached result (default 5
+ *                     minutes)
  * @param pollInterval default {@code pollInterval} suggested to requestors in task responses, or
- *                     {@code null} (the default) to suggest none; overridable per task via
- *                     {@code TaskOptions.pollInterval()}. Unlike {@code keepAlive}, this value is
- *                     wire-visible and spec-compliant requestors {@code SHOULD} throttle their own
- *                     polling cadence to match it — pick a value that fits how long tasks in this
- *                     server actually run, there's no one-size-fits-all default.
+ *                     {@code null} (the default) to suggest none when a snapshot omits one
  */
+@ExperimentalApi
 public record TasksConfig(
         boolean enabled,
-        boolean list,
-        boolean cancel,
-        boolean requests,
+        @Nullable TaskConnector connector,
         int pageSize,
         Duration keepAlive,
         @Nullable Duration pollInterval) {
 
     static final boolean DEFAULT_TASKS_ENABLED = false;
-    static final boolean DEFAULT_TASK_LIST = false;
-    static final boolean DEFAULT_TASK_CANCEL = false;
-    static final boolean DEFAULT_TASK_REQUESTS = false;
 
-    /** Public (unlike the defaults above) — {@code TaskEntry} in a different package reuses this as the resolved default. */
+    /** Default retention window for terminal snapshots in the internal cache. */
     public static final Duration DEFAULT_TASK_KEEP_ALIVE = Duration.ofMinutes(5);
 
     static final TasksConfig DEFAULT =
-            new TasksConfig(false, false, false, false, Pagination.DEFAULT_PAGE_SIZE, DEFAULT_TASK_KEEP_ALIVE, null);
+            new TasksConfig(false, null, Pagination.DEFAULT_PAGE_SIZE, DEFAULT_TASK_KEEP_ALIVE, null);
 
     public TasksConfig {
         if (pageSize <= 0) {
             throw new IllegalArgumentException("pageSize must be positive, got: " + pageSize);
         }
         Objects.requireNonNull(keepAlive, "keepAlive");
+        if (pollInterval != null && (pollInterval.isZero() || pollInterval.isNegative())) {
+            throw new IllegalArgumentException("pollInterval must be positive, got: " + pollInterval);
+        }
+    }
+
+    /** Whether the connector supports the legacy (pre-SEP-2663) {@code tasks/list} operation. */
+    @SuppressWarnings("deprecation")
+    public boolean list() {
+        return connector != null && connector.list() != null;
+    }
+
+    /** Whether the connector supports {@code tasks/cancel}. */
+    public boolean cancel() {
+        return connector != null;
+    }
+
+    /** Whether the connector supports {@code tasks/update}. */
+    public boolean requests() {
+        return connector != null;
     }
 
     public static Builder builder() {
@@ -62,12 +71,11 @@ public record TasksConfig(
     /**
      * Builder for {@link TasksConfig}.
      */
+    @ExperimentalApi
     public static final class Builder {
 
         private boolean enabled = DEFAULT_TASKS_ENABLED;
-        private boolean list = DEFAULT.list;
-        private boolean cancel = DEFAULT.cancel;
-        private boolean requests = DEFAULT.requests;
+        private @Nullable TaskConnector connector = DEFAULT.connector;
         private int pageSize = DEFAULT.pageSize;
         private Duration keepAlive = DEFAULT.keepAlive;
         private @Nullable Duration pollInterval = DEFAULT.pollInterval;
@@ -79,18 +87,9 @@ public record TasksConfig(
             return this;
         }
 
-        public Builder list(boolean list) {
-            this.list = list;
-            return this;
-        }
-
-        public Builder cancel(boolean cancel) {
-            this.cancel = cancel;
-            return this;
-        }
-
-        public Builder requests(boolean requests) {
-            this.requests = requests;
+        /** Sets the connector to the system that owns task execution. */
+        public Builder connector(@Nullable TaskConnector connector) {
+            this.connector = connector;
             return this;
         }
 
@@ -115,15 +114,8 @@ public record TasksConfig(
             return this;
         }
 
-        /**
-         * Enables the tasks capability with the list surface on.
-         */
-        public Builder on() {
-            return enabled(true).list(true);
-        }
-
         public TasksConfig build() {
-            return new TasksConfig(enabled, list, cancel, requests, pageSize, keepAlive, pollInterval);
+            return new TasksConfig(enabled, connector, pageSize, keepAlive, pollInterval);
         }
     }
 }

@@ -7,6 +7,8 @@ import dev.tachyonmcp.api.server.domain.Role
 import dev.tachyonmcp.api.server.extensions.AdvertiseMode
 import dev.tachyonmcp.api.server.extensions.ExtensionContext
 import dev.tachyonmcp.api.server.extensions.ServerExtension
+import dev.tachyonmcp.api.server.features.PaginatedResult
+import dev.tachyonmcp.api.server.features.tasks.TaskConnector
 import dev.tachyonmcp.api.server.features.tools.ToolResult
 import dev.tachyonmcp.api.server.session.SessionIdGenerator
 import dev.tachyonmcp.core.server.session.InMemorySessionEventStore
@@ -36,6 +38,17 @@ import kotlin.time.toJavaDuration
 
 @Suppress("LongMethod")
 internal class TachyonServerTest {
+    @Suppress("DEPRECATION")
+    private val taskConnector: TaskConnector =
+        TaskConnector
+            .builder()
+            .get { _, _ -> error("unused") }
+            .cancel { _, _ -> }
+            .update { _, _ -> }
+            .list { _, _ -> PaginatedResult.of(emptyList(), null, true) }
+            .awaitResult { _, _ -> error("unused") }
+            .build()
+
     private data class JacksonPayload(
         val message: String,
     )
@@ -123,12 +136,9 @@ internal class TachyonServerTest {
                         listChanged = true
                         pageSize = 22
                     }
-                    tasks {
-                        enabled = true
-                        list = true
-                        cancel = true
-                        requests = true
+                    tasks(taskConnector) {
                         pageSize = 23
+                        pollInterval = 250.milliseconds
                     }
                     completionsMode = Mode.ON
                     logging = true
@@ -205,9 +215,7 @@ internal class TachyonServerTest {
                 prompts().listChanged() shouldBe true
                 prompts().pageSize() shouldBe 22
                 tasks().enabled() shouldBe true
-                tasks().list() shouldBe true
-                tasks().cancel() shouldBe true
-                tasks().requests() shouldBe true
+                tasks().connector() shouldBe taskConnector
                 tasks().pageSize() shouldBe 23
                 completions() shouldBe Mode.ON
                 logging() shouldBe true

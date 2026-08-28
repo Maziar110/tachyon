@@ -127,6 +127,26 @@ class McpRequestMapperTest {
     }
 
     @Test
+    void taskUpdateMapsTaskIdAndInputResponses() {
+        var mapper = new McpRequestMapper();
+
+        var request = mapper.taskUpdate(Map.of("taskId", "task-1", "inputResponses", Map.of("answer", "Paris")));
+
+        assertThat(request.taskId()).isEqualTo("task-1");
+        assertThat(request.inputResponses()).containsEntry("answer", "Paris");
+    }
+
+    @Test
+    void taskUpdateRejectsMissingInputResponses() {
+        var mapper = new McpRequestMapper();
+
+        assertThatThrownBy(() -> mapper.taskUpdate(Map.of("taskId", "task-1")))
+                .isInstanceOf(RequestMappingException.class)
+                .satisfies(e -> assertThat(((RequestMappingException) e).error().kind())
+                        .isEqualTo(ServerError.Kind.INVALID_PARAMS));
+    }
+
+    @Test
     void completeRejectsUnknownRefType() {
         var mapper = new McpRequestMapper();
 
@@ -166,8 +186,8 @@ class McpRequestMapperTest {
         var mapper = new McpRequestMapper();
 
         assertThat(mapper.page(Map.of("limit", 10, "cursor", "abc")))
-                .isEqualTo(new ProtocolRequestMapper.PageRequest(10, "abc"));
-        assertThat(mapper.page(null)).isEqualTo(new ProtocolRequestMapper.PageRequest(0, null));
+                .isEqualTo(new ProtocolRequestMapper.PageRequest(10, "abc", null));
+        assertThat(mapper.page(null)).isEqualTo(new ProtocolRequestMapper.PageRequest(0, null, null));
     }
 
     @Test

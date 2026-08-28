@@ -7,6 +7,8 @@ import dev.tachyonmcp.api.server.domain.RequestId;
 import dev.tachyonmcp.api.server.domain.TextResourceContents;
 import dev.tachyonmcp.api.server.features.prompts.PromptDescriptor;
 import dev.tachyonmcp.api.server.features.resources.ResourceDescriptor;
+import dev.tachyonmcp.api.server.features.tasks.TaskSnapshot;
+import dev.tachyonmcp.api.server.features.tasks.TaskState;
 import dev.tachyonmcp.api.server.features.tools.ToolResult;
 import dev.tachyonmcp.core.protocol.Protocols;
 import dev.tachyonmcp.core.runtime.Backpressure;
@@ -18,6 +20,7 @@ import dev.tachyonmcp.core.server.session.SessionEvent;
 import dev.tachyonmcp.core.transport.netty.sse.PostSseStream;
 import io.netty.channel.embedded.EmbeddedChannel;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -379,14 +382,23 @@ class ServerTest {
             modern.connection(modernConnection);
             modern.activate();
 
-            server.tasks().create();
+            server.tasks()
+                    .publish(TaskSnapshot.builder()
+                            .taskId("task-1")
+                            .status(TaskState.SUBMITTED)
+                            .createdAt(Instant.EPOCH)
+                            .lastUpdatedAt(Instant.EPOCH)
+                            .revision(1)
+                            .build());
 
+            // SUBMITTED isn't a real wire value in either protocol version's status enum -- both
+            // fold it to "working" (verified against the current spec: 5 wire states, no submitted).
             assertThat(legacyConnection.sent)
                     .singleElement()
                     .satisfies(event -> assertThat(event.data()).contains("\"status\":\"working\""));
             assertThat(modernConnection.sent)
                     .singleElement()
-                    .satisfies(event -> assertThat(event.data()).contains("\"status\":\"submitted\""));
+                    .satisfies(event -> assertThat(event.data()).contains("\"status\":\"working\""));
         }
     }
 

@@ -2,8 +2,13 @@
 package dev.tachyonmcp.kotlin.server
 
 import dev.tachyonmcp.api.runtime.InteractionContext
+import dev.tachyonmcp.api.server.features.tasks.TaskCancelRequest
+import dev.tachyonmcp.api.server.features.tasks.TaskConnector
+import dev.tachyonmcp.api.server.features.tasks.TaskGetRequest
+import dev.tachyonmcp.api.server.features.tasks.TaskNotFoundException
+import dev.tachyonmcp.api.server.features.tasks.TaskSnapshot
+import dev.tachyonmcp.api.server.features.tasks.TaskState
 import dev.tachyonmcp.api.server.features.tasks.TaskSupport
-import dev.tachyonmcp.api.server.features.tools.ToolDescriptor
 import dev.tachyonmcp.api.server.features.tools.ToolRequest
 import dev.tachyonmcp.api.server.features.tools.ToolResult
 import dev.tachyonmcp.core.server.TachyonServer
@@ -16,12 +21,13 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Test
 import tools.jackson.databind.ObjectMapper
 import java.time.Duration
+import java.time.Instant
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
@@ -95,7 +101,7 @@ internal class ToolFnFactoryTest {
                 .build() as ServerEngine
         val started = CountDownLatch(1)
         val cancelled = AtomicBoolean()
-        try {
+        delegate.use { delegate ->
             val fn =
                 toolFn("shutdown-test", runtime) {
                     started.countDown()
@@ -117,8 +123,6 @@ internal class ToolFnFactoryTest {
             started.await(5, TimeUnit.SECONDS) shouldBe true
             delegate.close()
             cancelled.get() shouldBe true
-        } finally {
-            delegate.close()
         }
     }
 
@@ -162,26 +166,26 @@ internal class ToolFnFactoryTest {
     }
 
     @Test
-    fun `task cancellation cancels coroutine`() {
-        val started = CountDownLatch(1)
-        val cancelled = CountDownLatch(1)
-        val descriptor =
-            ToolDescriptor
+    fun `tasks cancel is delivered to the task connector`() {
+        val taskId = "cancellable-task"
+        val initial = TaskSnapshot.working(taskId, Instant.parse("2026-08-28T00:00:00Z"), 1)
+        val engine = RecordingCancelTaskEngine(initial)
+        val connector =
+            TaskConnector
                 .builder()
-                .name("cancellable")
-                .taskSupport(TaskSupport.OPTIONAL)
+                .get(engine::refresh)
+                .cancel(engine::cancel)
+                .update { _, _ -> }
                 .build()
 
         TachyonServer(port = 0) {
             name("cancellable-tool-test")
             session { enabled = true }
-            tool(descriptor) {
-                started.countDown()
-                try {
-                    awaitCancellation()
-                } finally {
-                    cancelled.countDown()
-                }
+            capabilities {
+                tasks(connector)
+            }
+            tool("cancellable", taskSupport = TaskSupport.REQUIRED) {
+                ToolResult.task(initial)
             }
         }.use { server ->
             McpProbe(server.port()).use { probe ->
@@ -191,29 +195,17 @@ internal class ToolFnFactoryTest {
                         """{"jsonrpc":"2.0","id":2,"method":"tools/call","params":""" +
                             """{"name":"cancellable","arguments":{},"task":{}}}""",
                     )
-                val callJson =
-                    call
-                        .body()
-                        .lineSequence()
-                        .filter { it.startsWith("data:") }
-                        .map { it.removePrefix("data:").trim() }
-                        .first { it.contains(""""id":2""") }
-                val taskId =
-                    ObjectMapper()
-                        .readTree(callJson)
-                        .get("result")
-                        .get("task")
-                        .get("taskId")
-                        .asString()
+                call.body() shouldContain taskId
 
-                started.await(5, TimeUnit.SECONDS) shouldBe true
                 val cancel =
                     probe.post(
                         """{"jsonrpc":"2.0","id":3,"method":"tasks/cancel","params":{"taskId":"$taskId"}}""",
                     )
+                val cancelJson = ObjectMapper().readTree(lastDataPayload(cancel.body()))
 
-                cancel.body() shouldContain """"status":"cancelled""""
-                cancelled.await(5, TimeUnit.SECONDS) shouldBe true
+                cancelJson.at("/result/taskId").asString() shouldBe taskId
+                cancelJson.at("/result/status").asString() shouldBe "cancelled"
+                engine.cancelledTaskIds shouldBe listOf(taskId)
             }
         }
     }
@@ -236,6 +228,19 @@ internal class ToolFnFactoryTest {
         }
     }
 
+    /**
+     * Extracts the JSON-RPC payload from an HTTP response body that may be plain JSON or a single
+     * SSE frame (`Accept: application/json, text/event-stream` lets the server pick either) --
+     * returns the last `data:` line's content, or the raw body if there is no SSE framing.
+     */
+    private fun lastDataPayload(body: String): String =
+        body
+            .lines()
+            .lastOrNull { it.startsWith("data:") }
+            ?.removePrefix("data:")
+            ?.trim()
+            ?: body
+
     private fun withCoroutineRuntime(block: (CoroutineRuntime, InteractionContext) -> Unit) {
         val runtime = CoroutineRuntime()
         val delegate =
@@ -246,6 +251,37 @@ internal class ToolFnFactoryTest {
                 .build() as ServerEngine
         delegate.use {
             block(runtime, DefaultDispatchContext.stateless(delegate))
+        }
+    }
+
+    private class RecordingCancelTaskEngine(
+        initial: TaskSnapshot,
+    ) {
+        val cancelledTaskIds = CopyOnWriteArrayList<String>()
+        private val snapshot = AtomicReference(initial)
+
+        fun refresh(
+            @Suppress("unused")
+            context: InteractionContext,
+            request: TaskGetRequest,
+        ): TaskSnapshot =
+            snapshot.get().takeIf { it.taskId() == request.taskId() }
+                ?: throw TaskNotFoundException(request.taskId())
+
+        fun cancel(
+            @Suppress("unused")
+            context: InteractionContext,
+            request: TaskCancelRequest,
+        ) {
+            cancelledTaskIds += request.taskId()
+            snapshot.updateAndGet {
+                TaskSnapshot
+                    .builder()
+                    .from(it)
+                    .status(TaskState.CANCELLED)
+                    .revision(it.revision() + 1)
+                    .build()
+            }
         }
     }
 }

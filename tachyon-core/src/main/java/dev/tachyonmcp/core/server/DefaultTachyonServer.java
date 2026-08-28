@@ -9,6 +9,7 @@ import dev.tachyonmcp.api.json.spi.JsonSchemaFactory;
 import dev.tachyonmcp.api.runtime.Notifications;
 import dev.tachyonmcp.api.server.config.RuntimeConfig;
 import dev.tachyonmcp.api.server.domain.LoggingLevel;
+import dev.tachyonmcp.api.server.domain.ProgressToken;
 import dev.tachyonmcp.api.server.domain.RequestId;
 import dev.tachyonmcp.api.server.domain.ServerCapabilities;
 import dev.tachyonmcp.api.server.extensions.ExtensionContext;
@@ -17,6 +18,7 @@ import dev.tachyonmcp.api.server.extensions.ServerExtension;
 import dev.tachyonmcp.api.server.features.completions.Completions;
 import dev.tachyonmcp.api.server.features.prompts.Prompts;
 import dev.tachyonmcp.api.server.features.resources.Resources;
+import dev.tachyonmcp.api.server.features.tasks.TaskSnapshot;
 import dev.tachyonmcp.api.server.features.tasks.TaskSupport;
 import dev.tachyonmcp.api.server.features.tasks.Tasks;
 import dev.tachyonmcp.api.server.features.tools.Tools;
@@ -38,7 +40,6 @@ import dev.tachyonmcp.core.server.features.resources.DefaultResourceRegistry;
 import dev.tachyonmcp.core.server.features.resources.ResourceMethodHandlers;
 import dev.tachyonmcp.core.server.features.subscriptions.SubscriptionRegistry;
 import dev.tachyonmcp.core.server.features.tasks.DefaultTaskRegistry;
-import dev.tachyonmcp.core.server.features.tasks.TaskEntry;
 import dev.tachyonmcp.core.server.features.tasks.TaskMethodHandlers;
 import dev.tachyonmcp.core.server.features.tasks.TaskRegistry;
 import dev.tachyonmcp.core.server.features.tools.DefaultToolRegistry;
@@ -245,6 +246,33 @@ final class DefaultTachyonServer implements ServerEngine, ExtensionContext {
         return builder.build();
     }
 
+    void validateConfiguration() {
+        // Only TaskSupport.REQUIRED is checked eagerly: it always attempts to create a task, on
+        // every call, so a missing connector is unambiguously a misconfiguration. OPTIONAL tools
+        // may run synchronously and never touch the connector -- under MCP 2026-07-28 OPTIONAL
+        // always runs synchronously, and under 2025-11-25 the client decides per call. FORBIDDEN
+        // tools never touch it either. ToolMethodHandlers.mapResult still rejects a
+        // REQUIRED-without-connector call at runtime; this just fails faster.
+        var hasRequiredTaskTool = toolRegistry.getAll().stream()
+                .anyMatch(handler -> handler.descriptor().taskSupport() == TaskSupport.REQUIRED);
+        var connectorMissing = !config.capabilities().tasks().enabled() || !taskRegistry.executionConfigured();
+        if (hasRequiredTaskTool && connectorMissing) {
+            throw new IllegalStateException("Task-producing tools require a TaskConnector");
+        }
+        if (connectorMissing) {
+            var optionalTaskTools = toolRegistry.getAll().stream()
+                    .filter(handler -> handler.descriptor().taskSupport() == TaskSupport.OPTIONAL)
+                    .map(handler -> handler.descriptor().name())
+                    .toList();
+            if (!optionalTaskTools.isEmpty()) {
+                logger.warn(
+                        "Tool(s) {} declare TaskSupport.OPTIONAL but no TaskConnector is configured -- a"
+                                + " task-augmented call to them will fail at runtime under MCP 2025-11-25",
+                        optionalTaskTools);
+            }
+        }
+    }
+
     DefaultTachyonServer(
             ExecutorService executor,
             SessionEventStore sessionEventStore,
@@ -410,14 +438,35 @@ final class DefaultTachyonServer implements ServerEngine, ExtensionContext {
     }
 
     @Override
-    public void notifyTaskStatus(TaskEntry entry) {
-        var sessionId = entry.sessionId();
+    public void notifyTaskStatus(TaskSnapshot snapshot, @Nullable String sessionId) {
         if (sessionId != null) {
-            getSession(sessionId).ifPresent(session -> notifyTaskStatus(session, entry));
+            getSession(sessionId).ifPresent(session -> notifyTaskStatus(session, snapshot));
         } else {
             for (var session : sessionManager.allSessions()) {
                 if (session.state() == SessionState.ACTIVE) {
-                    notifyTaskStatus(session, entry);
+                    notifyTaskStatus(session, snapshot);
+                }
+            }
+        }
+        // Session-based delivery above serves legacy (2025-11-25) requestors. Modern (2026-07-28)
+        // requestors opt in per taskId via subscriptions/listen, independent of any session.
+        subscriptionRegistry.notifyTaskStatus(snapshot);
+    }
+
+    @Override
+    public void notifyTaskProgress(
+            ProgressToken progressToken,
+            @Nullable String sessionId,
+            double progress,
+            @Nullable Double total,
+            @Nullable String message) {
+        if (sessionId != null) {
+            getSession(sessionId)
+                    .ifPresent(session -> notifyTaskProgress(session, progressToken, progress, total, message));
+        } else {
+            for (var session : sessionManager.allSessions()) {
+                if (session.state() == SessionState.ACTIVE) {
+                    notifyTaskProgress(session, progressToken, progress, total, message);
                 }
             }
         }
@@ -428,13 +477,27 @@ final class DefaultTachyonServer implements ServerEngine, ExtensionContext {
         subscriptionRegistry.notifyResourceUpdated(uri);
     }
 
-    private void notifyTaskStatus(Session session, TaskEntry entry) {
+    private void notifyTaskStatus(Session session, TaskSnapshot snapshot) {
         var protocol = session.protocol();
-        var params =
-                (protocol != null ? protocol.responseMapper() : responseMapper()).taskStatusNotificationParams(entry);
+        var params = (protocol != null ? protocol.responseMapper() : responseMapper())
+                .taskStatusNotificationParams(snapshot);
         var paramsJson = JsonUtils.writeString(params);
         var notificationJson = JsonRpcCodec.serializeNotificationAsString("notifications/tasks/status", paramsJson);
         sendSerializedNotification(session, "notifications/tasks/status", paramsJson, notificationJson, null);
+    }
+
+    private void notifyTaskProgress(
+            Session session,
+            ProgressToken progressToken,
+            double progress,
+            @Nullable Double total,
+            @Nullable String message) {
+        var protocol = session.protocol();
+        var mapper = protocol != null ? protocol.responseMapper() : responseMapper();
+        var params = mapper.progressNotificationParams(progressToken, progress, total, message);
+        var paramsJson = JsonUtils.writeString(params);
+        var notificationJson = JsonRpcCodec.serializeNotificationAsString("notifications/progress", paramsJson);
+        sendSerializedNotification(session, "notifications/progress", paramsJson, notificationJson, null);
     }
 
     private void registerDefaults() {

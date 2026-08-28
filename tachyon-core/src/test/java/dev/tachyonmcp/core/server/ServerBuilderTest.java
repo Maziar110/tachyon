@@ -15,6 +15,7 @@ import dev.tachyonmcp.api.server.features.completions.AsyncCompletionFn;
 import dev.tachyonmcp.api.server.features.completions.CompletionFn;
 import dev.tachyonmcp.api.server.features.completions.CompletionResult;
 import dev.tachyonmcp.api.server.features.prompts.PromptResult;
+import dev.tachyonmcp.api.server.features.tasks.TaskSupport;
 import dev.tachyonmcp.api.server.features.tools.ToolResult;
 import dev.tachyonmcp.core.server.session.SessionEvent;
 import dev.tachyonmcp.core.server.session.SessionEventStore;
@@ -22,6 +23,8 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 /**
  * Verifies {@link ServerBuilder} configures a server-owned virtual-thread-per-task executor for
@@ -196,6 +199,31 @@ class ServerBuilderTest {
     void portThrowsBeforeStart() {
         try (var server = TachyonServer.builder().build()) {
             assertThatIllegalStateException().isThrownBy(server::port);
+        }
+    }
+
+    @Test
+    void requiredTaskSupportRequiresTaskConnector() {
+        assertThatThrownBy(() -> TachyonServer.builder()
+                        .withTools(tools -> tools.register(
+                                builder -> builder.name("task-tool").taskSupport(TaskSupport.REQUIRED),
+                                (context, request) -> ToolResult.empty()))
+                        .build())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Task-producing tools require a TaskConnector");
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = TaskSupport.class,
+            names = {"FORBIDDEN", "OPTIONAL"})
+    void nonRequiredTaskSupportBuildsWithoutTaskConnector(TaskSupport taskSupport) {
+        try (var server = TachyonServer.builder()
+                .withTools(tools -> tools.register(
+                        builder -> builder.name("task-tool").taskSupport(taskSupport),
+                        (context, request) -> ToolResult.empty()))
+                .build()) {
+            assertThat(server).isNotNull();
         }
     }
 

@@ -2,13 +2,17 @@
 package dev.tachyonmcp.core.protocol.mcp.v2026_07_28.codecs;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.tachyonmcp.api.json.JsonSchema;
+import dev.tachyonmcp.api.server.domain.FormInputRequest;
+import dev.tachyonmcp.api.server.domain.InputRequestBundle;
 import dev.tachyonmcp.api.server.domain.ServerError;
 import dev.tachyonmcp.api.server.domain.TaskResult;
+import dev.tachyonmcp.api.server.features.tasks.TaskSnapshot;
 import dev.tachyonmcp.api.server.features.tasks.TaskState;
-import dev.tachyonmcp.core.server.features.tasks.TaskEntry;
 import java.time.Duration;
-import java.util.List;
+import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.node.JsonNodeFactory;
@@ -20,19 +24,35 @@ import tools.jackson.databind.node.JsonNodeFactory;
  */
 class McpTaskMapperTest {
 
-    private static TaskEntry entry(TaskState status) {
-        return TaskEntry.builder("task-1")
+    /** Builds a minimal snapshot satisfying {@code status}'s result/pendingInput invariant. */
+    private static TaskSnapshot entry(TaskState status) {
+        var builder = TaskSnapshot.builder()
+                .taskId("task-1")
                 .status(status)
                 .ttl(Duration.ofMinutes(1))
-                .sessionId("session-1")
                 .meta(Map.of("trace", "abc"))
-                .build();
+                .createdAt(Instant.EPOCH)
+                .lastUpdatedAt(Instant.EPOCH)
+                .revision(1);
+        if (status == TaskState.COMPLETED || status == TaskState.REJECTED) {
+            builder.result(TaskResult.completed(Map.of()));
+        }
+        if (status == TaskState.FAILED) {
+            builder.result(TaskResult.failed(new ServerError(ServerError.Kind.INTERNAL_ERROR, "failed")));
+        }
+        if (status == TaskState.INPUT_REQUIRED) {
+            builder.pendingInput(new InputRequestBundle(
+                    Map.of("field", FormInputRequest.of("test", JsonSchema.unchecked("{\"type\":\"object\"}"))), null));
+        }
+        return builder.build();
     }
 
     @Test
-    void submittedMapsToSubmittedWireString() {
+    void submittedFoldsToWorkingWireString() {
+        // Verified against the current tasks extension spec: the wire status enum has exactly five
+        // values (working, input_required, completed, failed, cancelled) — submitted isn't one.
         var node = McpTaskMapper.toGetTaskResult(entry(TaskState.SUBMITTED), null, null, null);
-        assertThat(node.get("status").asString()).isEqualTo("submitted");
+        assertThat(node.get("status").asString()).isEqualTo("working");
         assertThat(node.get("taskId").asString()).isEqualTo("task-1");
         assertThat(node.get("createdAt").asString()).isNotEmpty();
         assertThat(node.get("lastUpdatedAt").asString()).isNotEmpty();
@@ -40,20 +60,26 @@ class McpTaskMapperTest {
     }
 
     @Test
-    void unknownMapsToUnknownWireStringInsteadOfThrowing() {
-        var node = McpTaskMapper.toGetTaskResult(entry(TaskState.UNKNOWN), null, null, null);
-        assertThat(node.get("status").asString()).isEqualTo("unknown");
+    void unknownCannotBeProjectedToMcp() {
+        assertThatThrownBy(() -> McpTaskMapper.toGetTaskResult(entry(TaskState.UNKNOWN), null, null, null))
+                .isInstanceOf(UnsupportedOperationException.class)
+                .hasMessageContaining("UNKNOWN");
     }
 
     @Test
     void sharedStatesMatchTheFiveClassicWireStrings() {
+        assertThat(McpTaskMapper.toWireStatus(TaskState.SUBMITTED)).isEqualTo("working");
         assertThat(McpTaskMapper.toWireStatus(TaskState.WORKING)).isEqualTo("working");
         assertThat(McpTaskMapper.toWireStatus(TaskState.INPUT_REQUIRED)).isEqualTo("input_required");
         assertThat(McpTaskMapper.toWireStatus(TaskState.COMPLETED)).isEqualTo("completed");
         assertThat(McpTaskMapper.toWireStatus(TaskState.CANCELLED)).isEqualTo("cancelled");
         assertThat(McpTaskMapper.toWireStatus(TaskState.FAILED)).isEqualTo("failed");
-        assertThat(McpTaskMapper.toWireStatus(TaskState.REJECTED)).isEqualTo("failed");
-        assertThat(McpTaskMapper.toWireStatus(TaskState.AUTH_REQUIRED)).isEqualTo("failed");
+        assertThatThrownBy(() -> McpTaskMapper.toWireStatus(TaskState.REJECTED))
+                .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> McpTaskMapper.toWireStatus(TaskState.AUTH_REQUIRED))
+                .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> McpTaskMapper.toWireStatus(TaskState.UNKNOWN))
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
@@ -70,7 +96,13 @@ class McpTaskMapperTest {
     void ttlMsIsWrittenAsNullRatherThanOmittedWhenUnlimited() {
         // SEP-2663 types Task.ttlMs as `number | null` (required) unlike the optional
         // pollIntervalMs -- an unlimited task must still report the key, just with a null value.
-        var unlimited = TaskEntry.builder("task-2").status(TaskState.SUBMITTED).build();
+        var unlimited = TaskSnapshot.builder()
+                .taskId("task-2")
+                .status(TaskState.SUBMITTED)
+                .createdAt(Instant.EPOCH)
+                .lastUpdatedAt(Instant.EPOCH)
+                .revision(1)
+                .build();
 
         var node = McpTaskMapper.toGetTaskResult(unlimited, null, null, null);
 
@@ -110,19 +142,30 @@ class McpTaskMapperTest {
     }
 
     @Test
-    void toolLevelErrorReportsCompletedStatusNotFailed() {
-        var task = entry(TaskState.WORKING);
-        task.fail(new TaskResult.Failed(List.of(), null, null));
+    void toolLevelErrorReportsCompletedStatusForGetAndCreate() {
+        var task = TaskSnapshot.builder()
+                .from(entry(TaskState.WORKING))
+                .status(TaskState.COMPLETED)
+                .result(TaskResult.completedWithError("boom"))
+                .revision(2)
+                .build();
 
-        var node = McpTaskMapper.toGetTaskResult(task, null, null, null);
+        var getNode = McpTaskMapper.toGetTaskResult(task, null, null, null);
+        var createNode = McpTaskMapper.toCreateTaskResult(task);
 
-        assertThat(node.get("status").asString()).isEqualTo("completed");
+        assertThat(getNode.get("status").asString()).isEqualTo("completed");
+        assertThat(createNode.get("status").asString()).isEqualTo("completed");
+        assertThat(createNode.get("resultType").asString()).isEqualTo("task");
     }
 
     @Test
     void protocolErrorReportsFailedStatus() {
-        var task = entry(TaskState.WORKING);
-        task.fail(TaskResult.failed(new ServerError(ServerError.Kind.INTERNAL_ERROR, "boom")));
+        var task = TaskSnapshot.builder()
+                .from(entry(TaskState.WORKING))
+                .status(TaskState.FAILED)
+                .result(TaskResult.failed(new ServerError(ServerError.Kind.INTERNAL_ERROR, "boom")))
+                .revision(2)
+                .build();
 
         var node = McpTaskMapper.toGetTaskResult(task, null, null, null);
 
@@ -132,7 +175,7 @@ class McpTaskMapperTest {
     @Test
     void createTaskResultIsFlatWithTaskDiscriminator() {
         var node = McpTaskMapper.toCreateTaskResult(entry(TaskState.SUBMITTED));
-        assertThat(node.get("status").asString()).isEqualTo("submitted");
+        assertThat(node.get("status").asString()).isEqualTo("working");
         assertThat(node.get("taskId").asString()).isEqualTo("task-1");
         assertThat(node.get("resultType").asString()).isEqualTo("task");
         assertThat(node.get("_meta").get("trace").asString()).isEqualTo("abc");
@@ -149,7 +192,7 @@ class McpTaskMapperTest {
 
     @Test
     void statusNotificationCarriesTheCurrentStatus() {
-        assertThat(McpTaskMapper.toStatusNotification(entry(TaskState.INPUT_REQUIRED))
+        assertThat(McpTaskMapper.toStatusNotification(entry(TaskState.INPUT_REQUIRED), null, null, null)
                         .get("status")
                         .asString())
                 .isEqualTo("input_required");

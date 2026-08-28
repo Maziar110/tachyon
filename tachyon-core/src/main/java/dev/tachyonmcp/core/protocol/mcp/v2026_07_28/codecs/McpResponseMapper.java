@@ -23,6 +23,7 @@ import dev.tachyonmcp.api.server.features.completions.CompletionResult;
 import dev.tachyonmcp.api.server.features.prompts.PromptDescriptor;
 import dev.tachyonmcp.api.server.features.resources.ResourceDescriptor;
 import dev.tachyonmcp.api.server.features.resources.ResourceTemplateDescriptor;
+import dev.tachyonmcp.api.server.features.tasks.TaskSnapshot;
 import dev.tachyonmcp.api.server.features.tools.ToolDescriptor;
 import dev.tachyonmcp.api.server.features.tools.ToolResult;
 import dev.tachyonmcp.core.protocol.ProtocolRequestMapper.SubscriptionListenRequest;
@@ -57,7 +58,6 @@ import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.SubscriptionsAcknowle
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.SubscriptionsListenResult;
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.TextResourceContents;
 import dev.tachyonmcp.core.protocol.mcp.v2026_07_28.models.Tool;
-import dev.tachyonmcp.core.server.features.tasks.TaskEntry;
 import dev.tachyonmcp.core.server.json.JsonUtils;
 import dev.tachyonmcp.core.transport.jsonrpc.JsonRpcCodec;
 import dev.tachyonmcp.core.transport.jsonrpc.JsonRpcError;
@@ -211,9 +211,11 @@ public final class McpResponseMapper extends dev.tachyonmcp.core.protocol.mcp.v2
         return switch (result) {
             case ToolResult.InputRequired ir ->
                 inputRequired(ir.inputRequests(), ir.requestState(), resolveMeta(result));
+            case ToolResult.Task ignored -> throw new IllegalArgumentException("Task result requires task mapping");
             case ToolResult.Error error -> buildCallToolResult(error.content(), null, true, resolveMeta(result));
             case ToolResult.Success success ->
                 buildCallToolResult(success.content(), success.structuredValue(), null, resolveMeta(result));
+            default -> throw new IllegalArgumentException("Unsupported ToolResult: " + result.getClass());
         };
     }
 
@@ -286,25 +288,25 @@ public final class McpResponseMapper extends dev.tachyonmcp.core.protocol.mcp.v2
     }
 
     @Override
-    public Object getTaskResult(dev.tachyonmcp.api.server.domain.Task entry) {
-        var taskEntry = (TaskEntry) entry;
+    public Object getTaskResult(TaskSnapshot snapshot) {
         return McpTaskMapper.toGetTaskResult(
-                taskEntry, taskResultNode(taskEntry), taskErrorNode(taskEntry), inputRequestsNode(taskEntry));
+                snapshot, taskResultNode(snapshot), taskErrorNode(snapshot), inputRequestsNode(snapshot));
     }
 
     @Override
-    public Object createTaskResult(TaskEntry entry) {
-        return McpTaskMapper.toCreateTaskResult(entry);
+    public Object createTaskResult(TaskSnapshot snapshot) {
+        return McpTaskMapper.toCreateTaskResult(snapshot);
     }
 
     @Override
-    public Object cancelTaskResult(TaskEntry entry) {
+    public Object cancelTaskResult(TaskSnapshot snapshot) {
         return McpTaskMapper.toCancelTaskResult();
     }
 
     @Override
-    public Object taskStatusNotificationParams(TaskEntry entry) {
-        return McpTaskMapper.toStatusNotification(entry);
+    public Object taskStatusNotificationParams(TaskSnapshot snapshot) {
+        return McpTaskMapper.toStatusNotification(
+                snapshot, taskResultNode(snapshot), taskErrorNode(snapshot), inputRequestsNode(snapshot));
     }
 
     @Override
@@ -319,12 +321,15 @@ public final class McpResponseMapper extends dev.tachyonmcp.core.protocol.mcp.v2
     @Override
     public Object subscriptionsAcknowledgedParams(RequestId subscriptionId, SubscriptionListenRequest filter) {
         var uris = filter.resourceSubscriptions();
+        var taskIds = filter.taskIds();
         return new SubscriptionsAcknowledgedNotificationParams(
                 new SubscriptionFilter(
                         trueOrNull(filter.toolsListChanged()),
                         trueOrNull(filter.promptsListChanged()),
                         trueOrNull(filter.resourcesListChanged()),
-                        uris.isEmpty() ? null : List.copyOf(uris)),
+                        uris.isEmpty() ? null : List.copyOf(uris),
+                        taskIds.isEmpty() ? null : List.copyOf(taskIds),
+                        null),
                 subscriptionIdMeta(subscriptionId));
     }
 
@@ -358,44 +363,35 @@ public final class McpResponseMapper extends dev.tachyonmcp.core.protocol.mcp.v2
     }
 
     /**
-     * Inlines a completed task's outcome (or a tool-level {@code isError: true} failure — see
-     * {@link TaskResult.Failed#protocolError()}) into {@code tasks/get}'s {@code result} field, in
-     * the same shape a synchronous {@code tools/call} would have returned. {@code null} while the
-     * task hasn't reached a result-bearing state.
+     * Inlines a completed task's outcome (including a tool-level {@code isError: true} failure)
+     * into {@code tasks/get}'s {@code result} field, in the same shape a synchronous {@code
+     * tools/call} would have returned. {@code null} while the task hasn't reached a
+     * result-bearing state, or for a genuine {@link TaskResult.Failed} protocol failure — see
+     * {@link #taskErrorNode(TaskSnapshot)}.
      */
-    private @Nullable JsonNode taskResultNode(TaskEntry entry) {
-        return switch (entry.result()) {
-            case TaskResult.Completed c ->
-                encodeToTree(
-                        CallToolResult.class,
-                        buildCallToolResult(
-                                c.content(), c.structuredContent(), null, JsonUtils.toJsonNodeMap(c.meta())));
-            case TaskResult.Failed f
-            when f.protocolError() == null ->
-                encodeToTree(
-                        CallToolResult.class,
-                        buildCallToolResult(
-                                f.content(), f.structuredContent(), true, JsonUtils.toJsonNodeMap(f.meta())));
-            case null, default -> null;
-        };
+    private @Nullable JsonNode taskResultNode(TaskSnapshot snapshot) {
+        if (!(snapshot.result() instanceof TaskResult.Completed c)) {
+            return null;
+        }
+        return encodeToTree(CallToolResult.class, (CallToolResult) callToolResult(c.result()));
     }
 
     /**
      * Inlines a paused task's outstanding {@code inputRequests} into {@code tasks/get} while it's
      * {@code input_required}; {@code null} in every other state.
      */
-    private @Nullable JsonNode inputRequestsNode(TaskEntry entry) {
-        var pending = entry.pendingInput();
+    private @Nullable JsonNode inputRequestsNode(TaskSnapshot snapshot) {
+        var pending = snapshot.pendingInput();
         var encoded = pending != null ? encodedInputRequests(pending.inputRequests()) : null;
         return encoded != null ? encodeToTree(InputRequests.class, encoded) : null;
     }
 
     /** Inlines a genuine JSON-RPC protocol failure into {@code tasks/get}'s {@code error} field. */
-    private @Nullable JsonNode taskErrorNode(TaskEntry entry) {
-        if (!(entry.result() instanceof TaskResult.Failed f) || f.protocolError() == null) {
+    private @Nullable JsonNode taskErrorNode(TaskSnapshot snapshot) {
+        if (!(snapshot.result() instanceof TaskResult.Failed f)) {
             return null;
         }
-        var mapped = error(f.protocolError());
+        var mapped = error(f.error());
         var fields = new LinkedHashMap<String, Object>();
         fields.put("code", mapped.code());
         fields.put("message", mapped.message());

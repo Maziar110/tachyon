@@ -1,8 +1,11 @@
 /* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
 package dev.tachyonmcp.core.server.config;
 
+import dev.tachyonmcp.api.annotations.ExperimentalApi;
 import dev.tachyonmcp.api.server.config.Mode;
+import dev.tachyonmcp.api.server.features.tasks.TaskConnector;
 import java.time.Duration;
+import java.util.Objects;
 
 /**
  * Configuration of which MCP capabilities to enable and their behaviour.
@@ -18,7 +21,7 @@ public record CapabilitiesConfig(
         FeatureConfig tools,
         ResourcesConfig resources,
         FeatureConfig prompts,
-        TasksConfig tasks,
+        @ExperimentalApi TasksConfig tasks,
         Mode completions,
         boolean logging) {
 
@@ -110,11 +113,10 @@ public record CapabilitiesConfig(
         public Builder tasks(TasksConfig config) {
             tasksBuilder = TasksConfig.builder()
                     .enabled(config.enabled())
-                    .list(config.list())
-                    .cancel(config.cancel())
-                    .requests(config.requests())
+                    .connector(config.connector())
                     .pageSize(config.pageSize())
-                    .keepAlive(config.keepAlive());
+                    .keepAlive(config.keepAlive())
+                    .pollInterval(config.pollInterval());
             return this;
         }
 
@@ -253,39 +255,6 @@ public record CapabilitiesConfig(
         }
 
         /**
-         * Sets whether task listing is enabled.
-         *
-         * @param tasksList whether task listing is enabled
-         * @return this builder
-         */
-        public Builder tasksList(boolean tasksList) {
-            tasksBuilder.list(tasksList);
-            return this;
-        }
-
-        /**
-         * Sets whether task cancellation is enabled.
-         *
-         * @param tasksCancel whether task cancellation is enabled
-         * @return this builder
-         */
-        public Builder tasksCancel(boolean tasksCancel) {
-            tasksBuilder.cancel(tasksCancel);
-            return this;
-        }
-
-        /**
-         * Sets whether task requests are enabled.
-         *
-         * @param tasksRequests whether task requests are enabled
-         * @return this builder
-         */
-        public Builder tasksRequests(boolean tasksRequests) {
-            tasksBuilder.requests(tasksRequests);
-            return this;
-        }
-
-        /**
          * Sets the tasks page size.
          *
          * @param tasksPageSize the tasks page size
@@ -324,11 +293,13 @@ public record CapabilitiesConfig(
          * @return the built {@link CapabilitiesConfig}
          */
         public CapabilitiesConfig build() {
+            var tasks = tasksBuilder.build();
+            validateTaskConnector(tasks);
             return new CapabilitiesConfig(
                     toolsBuilder.build(),
                     resourcesBuilder.build(),
                     promptsBuilder.build(),
-                    tasksBuilder.build(),
+                    tasks,
                     completions,
                     logging);
         }
@@ -453,34 +424,26 @@ public record CapabilitiesConfig(
          * @return this builder
          */
         public Builder noTasks() {
-            return tasksEnabled(false);
-        }
-
-        /**
-         * Enables tasks with default settings.
-         *
-         * @return this builder
-         */
-        public Builder tasks() {
-            tasksBuilder
-                    .enabled(true)
-                    .list(TasksConfig.DEFAULT_TASK_LIST)
-                    .cancel(TasksConfig.DEFAULT_TASK_CANCEL)
-                    .requests(TasksConfig.DEFAULT_TASK_REQUESTS);
+            tasksBuilder.enabled(false).connector(null);
             return this;
         }
 
         /**
-         * Enables tasks with the specified list, cancel, and requests settings.
+         * Enables tasks using the supplied connector. Modern operations are required by the
+         * connector; legacy {@code tasks/list} and blocking result remain optional.
          *
-         * @param list    whether task listing is enabled
-         * @param cancel  whether task cancellation is enabled
-         * @param requests whether task requests are enabled
+         * @param connector task execution connector
          * @return this builder
          */
-        public Builder tasks(boolean list, boolean cancel, boolean requests) {
-            tasksBuilder.enabled(true).list(list).cancel(cancel).requests(requests);
+        public Builder tasks(TaskConnector connector) {
+            tasksBuilder.enabled(true).connector(Objects.requireNonNull(connector, "connector"));
             return this;
+        }
+
+        private static void validateTaskConnector(TasksConfig tasks) {
+            if (tasks.enabled() && tasks.connector() == null) {
+                throw new IllegalStateException("Tasks capability requires a TaskConnector");
+            }
         }
     }
 }

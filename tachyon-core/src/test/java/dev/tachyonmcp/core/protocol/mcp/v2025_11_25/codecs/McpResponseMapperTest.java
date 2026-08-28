@@ -5,7 +5,6 @@ import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.tachyonmcp.api.json.JsonSchema;
-import dev.tachyonmcp.api.server.domain.ContentBlock;
 import dev.tachyonmcp.api.server.domain.FormInputRequest;
 import dev.tachyonmcp.api.server.domain.LoggingLevel;
 import dev.tachyonmcp.api.server.domain.ProgressToken;
@@ -17,6 +16,7 @@ import dev.tachyonmcp.api.server.features.prompts.PromptDescriptor;
 import dev.tachyonmcp.api.server.features.resources.ResourceDescriptor;
 import dev.tachyonmcp.api.server.features.resources.ResourceTemplateDescriptor;
 import dev.tachyonmcp.api.server.features.tools.ToolDescriptor;
+import dev.tachyonmcp.api.server.features.tools.ToolResult;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.Annotations;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.CallToolResult;
 import dev.tachyonmcp.core.protocol.mcp.v2025_11_25.models.CompleteResult;
@@ -43,7 +43,7 @@ class McpResponseMapperTest {
 
     @Test
     void completedTaskPayloadIsCallToolResultWithContentAndRelatedTask() {
-        var result = new TaskResult.Completed(List.<ContentBlock>of(TextContent.of("done")), null, null);
+        var result = TaskResult.completed(ToolResult.Success.of(null, List.of(TextContent.of("done"))));
 
         var payload = (CallToolResult) mapper.getTaskPayloadResult(result, "task-1");
 
@@ -55,7 +55,7 @@ class McpResponseMapperTest {
     @Test
     void completedTaskPayloadCarriesStructuredContent() {
         var structured = JSON.objectNode().put("temp", 72);
-        var result = new TaskResult.Completed(List.of(), structured, null);
+        var result = TaskResult.completed(ToolResult.Success.of(structured, List.of()));
 
         var payload = (CallToolResult) mapper.getTaskPayloadResult(result, "task-2");
 
@@ -66,7 +66,7 @@ class McpResponseMapperTest {
 
     @Test
     void failedTaskPayloadSetsIsErrorTrue() {
-        var result = new TaskResult.Failed(List.<ContentBlock>of(TextContent.of("boom")), null, null);
+        var result = TaskResult.completedWithError("boom");
 
         var payload = (CallToolResult) mapper.getTaskPayloadResult(result, "task-3");
 
@@ -95,7 +95,10 @@ class McpResponseMapperTest {
     @Test
     void userMetaIsPreservedAlongsideRelatedTask() {
         var userMeta = Map.<String, Object>of("trace", "abc");
-        var result = new TaskResult.Completed(List.<ContentBlock>of(TextContent.of("ok")), null, userMeta);
+        var result = TaskResult.completed(ToolResult.Success.builder()
+                .content(TextContent.of("ok"))
+                .meta(userMeta)
+                .build());
 
         var payload = (CallToolResult) mapper.getTaskPayloadResult(result, "task-5");
 
@@ -145,12 +148,12 @@ class McpResponseMapperTest {
                         .build()),
                 null);
 
-        assertThat(completion._meta()).containsEntry("kind", JSON.textNode("completion"));
-        assertThat(promptResult._meta()).containsEntry("kind", JSON.textNode("prompt-result"));
-        assertThat(tools.tools().getFirst()._meta()).containsEntry("kind", JSON.textNode("tool"));
-        assertThat(resources.resources().getFirst()._meta()).containsEntry("kind", JSON.textNode("resource"));
-        assertThat(templates.resourceTemplates().getFirst()._meta()).containsEntry("kind", JSON.textNode("template"));
-        assertThat(prompts.prompts().getFirst()._meta()).containsEntry("kind", JSON.textNode("prompt"));
+        assertThat(completion._meta()).containsEntry("kind", JSON.stringNode("completion"));
+        assertThat(promptResult._meta()).containsEntry("kind", JSON.stringNode("prompt-result"));
+        assertThat(tools.tools().getFirst()._meta()).containsEntry("kind", JSON.stringNode("tool"));
+        assertThat(resources.resources().getFirst()._meta()).containsEntry("kind", JSON.stringNode("resource"));
+        assertThat(templates.resourceTemplates().getFirst()._meta()).containsEntry("kind", JSON.stringNode("template"));
+        assertThat(prompts.prompts().getFirst()._meta()).containsEntry("kind", JSON.stringNode("prompt"));
     }
 
     @Test
@@ -211,7 +214,7 @@ class McpResponseMapperTest {
 
         var decoded = (Map<String, ?>) JsonRpcCodec.readValue(json);
         var resources = (List<Map<String, ?>>) decoded.get("resources");
-        var ann = (Map<String, ?>) resources.get(0).get("annotations");
+        var ann = (Map<String, ?>) resources.getFirst().get("annotations");
         var audience = ((List<?>) ann.get("audience"))
                 .stream().map(s -> Role.fromValue((String) s)).toList();
         assertThat(audience).containsExactly(Role.USER, Role.ASSISTANT);

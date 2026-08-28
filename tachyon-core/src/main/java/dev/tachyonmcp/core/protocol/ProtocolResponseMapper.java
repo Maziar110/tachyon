@@ -11,17 +11,16 @@ import dev.tachyonmcp.api.server.domain.RequestId;
 import dev.tachyonmcp.api.server.domain.ResourceContents;
 import dev.tachyonmcp.api.server.domain.ServerCapabilities;
 import dev.tachyonmcp.api.server.domain.ServerError;
-import dev.tachyonmcp.api.server.domain.Task;
 import dev.tachyonmcp.api.server.domain.TaskResult;
 import dev.tachyonmcp.api.server.features.completions.CompletionResult;
 import dev.tachyonmcp.api.server.features.prompts.PromptDescriptor;
 import dev.tachyonmcp.api.server.features.resources.ResourceDescriptor;
 import dev.tachyonmcp.api.server.features.resources.ResourceTemplateDescriptor;
+import dev.tachyonmcp.api.server.features.tasks.TaskSnapshot;
 import dev.tachyonmcp.api.server.features.tools.ToolDescriptor;
 import dev.tachyonmcp.api.server.features.tools.ToolResult;
 import dev.tachyonmcp.core.protocol.ProtocolRequestMapper.SubscriptionListenRequest;
 import dev.tachyonmcp.core.server.domain.InitializeResponse;
-import dev.tachyonmcp.core.server.features.tasks.TaskEntry;
 import dev.tachyonmcp.core.server.json.JsonUtils;
 import dev.tachyonmcp.core.transport.jsonrpc.JsonRpcCodec;
 import dev.tachyonmcp.core.transport.jsonrpc.JsonRpcError;
@@ -103,23 +102,23 @@ public interface ProtocolResponseMapper {
             @Nullable String requestState,
             @Nullable Map<String, Object> meta);
 
-    /** Maps a paginated list of task entries into protocol-specific shape. */
-    Object listTasksResult(List<TaskEntry> entries, @Nullable String nextCursor);
+    /** Maps a paginated list of task snapshots into protocol-specific shape. */
+    Object listTasksResult(List<TaskSnapshot> snapshots, @Nullable String nextCursor);
 
-    /** Maps a single task entry (get result) into protocol-specific shape. */
-    Object getTaskResult(Task entry);
+    /** Maps a single task snapshot into protocol-specific shape. */
+    Object getTaskResult(TaskSnapshot snapshot);
 
-    /** Maps a newly created task entry into a CreateTaskResult (for task-augmented requests). */
-    Object createTaskResult(TaskEntry entry);
+    /** Maps an initial task snapshot into a CreateTaskResult. */
+    Object createTaskResult(TaskSnapshot snapshot);
 
-    /** Maps a cancelled task entry into protocol-specific shape. */
-    Object cancelTaskResult(TaskEntry entry);
+    /** Maps the task-bearing legacy cancellation response. Modern cancellation uses {@link #emptyResult()}. */
+    Object cancelTaskResult(TaskSnapshot snapshot);
 
     /** Maps a task's terminal result into the tasks/result payload — a {@code CallToolResult}. */
     Object getTaskPayloadResult(@Nullable TaskResult result, String taskId);
 
-    /** Builds the params object for a tasks/status notification from a task entry. */
-    Object taskStatusNotificationParams(TaskEntry entry);
+    /** Builds the params object for a tasks/status notification from a task snapshot. */
+    Object taskStatusNotificationParams(TaskSnapshot snapshot);
 
     /** Builds the params for a {@code notifications/message} notification. */
     Object loggingMessageParams(LoggingLevel level, @Nullable String logger, @Nullable Object data);
@@ -132,7 +131,8 @@ public interface ProtocolResponseMapper {
      * version's codegen output, narrower than the spec's {@code string | number} — converting a
      * numeric token through it would silently turn a JSON number into a JSON string on the wire.
      */
-    default Object progressNotificationParams(ProgressToken token, double progress, double total, String message) {
+    default Object progressNotificationParams(
+            ProgressToken token, double progress, @Nullable Double total, @Nullable String message) {
         Object wireToken =
                 switch (token) {
                     case ProgressToken.StringValue(var v) -> v;
@@ -141,8 +141,13 @@ public interface ProtocolResponseMapper {
         var fields = new LinkedHashMap<String, Object>(4);
         fields.put("progressToken", wireToken);
         fields.put("progress", progress);
-        fields.put("total", total);
-        fields.put("message", message);
+        // total and message are optional per spec -- omit rather than emitting a misleading total:0.
+        if (total != null) {
+            fields.put("total", total);
+        }
+        if (message != null) {
+            fields.put("message", message);
+        }
         return JsonUtils.toObjectNode(fields);
     }
 

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.tachyonmcp.api.server.config.Mode;
+import dev.tachyonmcp.api.server.features.tasks.TaskConnector;
 import dev.tachyonmcp.core.server.features.Pagination;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -67,5 +68,27 @@ class CapabilitiesConfigTest {
 
         assertThat(config.tools().mode()).isEqualTo(Mode.ON);
         assertThat(config.tools().pageSize()).isEqualTo(2);
+    }
+
+    @Test
+    void storesConfiguredTaskConnector() {
+        var connector = TaskConnector.builder()
+                .get((ctx, request) -> null)
+                .cancel((ctx, request) -> {})
+                .update((ctx, request) -> {})
+                .build();
+
+        var config = CapabilitiesConfig.builder().tasks(connector).build();
+
+        assertThat(config.tasks().connector()).isSameAs(connector);
+    }
+
+    @Test
+    void enabledTasksConfigRequiresExplicitConnector() {
+        var tasks = TasksConfig.builder().enabled(true).build();
+
+        assertThatThrownBy(() -> CapabilitiesConfig.builder().tasks(tasks).build())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Tasks capability requires a TaskConnector");
     }
 }
