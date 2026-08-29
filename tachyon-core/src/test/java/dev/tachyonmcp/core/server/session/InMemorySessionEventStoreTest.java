@@ -9,7 +9,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junitpioneer.jupiter.RetryingTest;
 
@@ -63,18 +62,11 @@ class InMemorySessionEventStoreTest {
 
     @RetryingTest(maxAttempts = 3)
     void throughput() throws Exception {
-        // The critical section is a single lock: throughput is bound by scheduling/contention
-        // overhead on the available cores, not by algorithmic parallelism. Below 4 cores the
-        // 8-thread setup can't produce a meaningful signal. Shared CI runners are noisy enough
-        // (confirmed: same runner type measured 375k-869k ops/sec across 3 retries on a run
-        // where >=4 cores were reported) that even a lowered absolute floor isn't safe there
-        // either, so this baseline only runs on dedicated (non-CI) hardware.
-        Assumptions.assumeTrue(
-                System.getenv("CI") == null && Runtime.getRuntime().availableProcessors() >= 4,
-                "Skipping throughput baseline: CI runner or fewer than 4 cores");
+        int threads = 3;
+        int eventsPerThread = 100_000;
 
-        int threads = 8;
-        int eventsPerThread = 10_000;
+        // warmup
+        measure(threads, eventsPerThread);
 
         long lockFreeOpsPerSec = measure(threads, eventsPerThread);
 
