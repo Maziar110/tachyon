@@ -1,0 +1,39 @@
+/* Copyright (c) 2026 Konstantin Pavlov/IT Staff and contributors. */
+package dev.tachyonmcp.core.server;
+
+import dev.tachyonmcp.api.annotations.InternalApi;
+import dev.tachyonmcp.api.server.domain.ServerError;
+import dev.tachyonmcp.api.server.interceptor.McpOutcome;
+import dev.tachyonmcp.core.server.session.DispatchContext;
+import org.jspecify.annotations.Nullable;
+
+/**
+ * Turns a handler result into the {@link McpOutcome} interceptors observe, resolving everything
+ * protocol-specific through the negotiated {@code ProtocolResponseMapper}.
+ *
+ * <p>Single home for the classification so the intercepted and non-intercepted dispatch paths
+ * cannot drift apart, and so nothing outside {@code tachyon-core} ever re-derives a JSON-RPC error
+ * code — the two MCP versions map several {@link ServerError.Kind}s differently.
+ */
+@InternalApi
+final class McpOutcomes {
+
+    private McpOutcomes() {}
+
+    /** Classifies a completed handler result. Errors are values here, not only failures. */
+    static McpOutcome of(@Nullable Object result, DispatchContext context) {
+        if (result instanceof ServerError error) {
+            return failure(error, context);
+        }
+        if (context.responseMapper().isPayloadError(result)) {
+            return new McpOutcome.PayloadFailure(result);
+        }
+        return new McpOutcome.Success(result);
+    }
+
+    /** Resolves {@code error} to the wire code this protocol version uses. */
+    static McpOutcome.Failure failure(ServerError error, DispatchContext context) {
+        return new McpOutcome.Failure(
+                error, context.responseMapper().error(error).code());
+    }
+}
