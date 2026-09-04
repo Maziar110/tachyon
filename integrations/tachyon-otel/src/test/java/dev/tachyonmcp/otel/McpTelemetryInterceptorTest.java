@@ -57,6 +57,8 @@ import org.junit.jupiter.params.provider.CsvSource;
  */
 class McpTelemetryInterceptorTest {
 
+    private static final String HANDLER_SPAN = "handler-work";
+
     private InMemorySpanExporter spans;
     private InMemoryMetricReader metrics;
     private OpenTelemetrySdk otel;
@@ -309,6 +311,32 @@ class McpTelemetryInterceptorTest {
         return matching.getFirst();
     }
 
+    /**
+     * Locks the invariant that the interceptor's span scope encloses the handler, so a span the
+     * handler starts joins the trace instead of becoming a root. A synchronous chain gets this for
+     * free — chain and handler share the thread — which is why {@code makeCurrent()} must stay
+     * wrapped around {@code chain.proceed()} and never be narrowed to the span construction.
+     */
+    @Test
+    @DisplayName("a span started inside a handler is a child of the interceptor's span")
+    void handlerSpanIsChildOfTheInterceptorSpan() throws Exception {
+        withServer(telemetry(), client -> {
+            var sessionId = initialized(client);
+
+            assertThat(client.post(
+                            sessionId,
+                            // language=json
+                            """
+                            {"jsonrpc":"2.0","id":30,"method":"tools/call","params":{"name":"nested","arguments":{}}}"""))
+                    .isSuccess();
+
+            var serverSpan = spanFor("tools/call nested");
+            var handlerSpan = spanFor(HANDLER_SPAN);
+            assertThat(handlerSpan.getParentSpanId()).isEqualTo(serverSpan.getSpanId());
+            assertThat(handlerSpan.getTraceId()).isEqualTo(serverSpan.getTraceId());
+        });
+    }
+
     /** {@code id} 10 backs the {@code jsonrpc.request.id} assertion in {@link #toolCallSpan()}. */
     private static String callForecast() {
         // language=json
@@ -324,13 +352,21 @@ class McpTelemetryInterceptorTest {
         }
     }
 
-    private static TachyonServer startServer(McpTelemetryInterceptor interceptor) {
+    private TachyonServer startServer(McpTelemetryInterceptor interceptor) {
         return McpTestServers.start(
                 builder -> builder.withInterceptors(interceptor).session(session -> session.enabled(true)), server -> {
                     server.tools().register(tool -> tool.name("forecast"), (ctx, request) -> ToolResult.text("sunny"));
                     server.tools().register(tool -> tool.name("failing"), (ctx, request) -> ToolResult.error("nope"));
                     server.tools().register(tool -> tool.name("throwing"), (ctx, request) -> {
                         throw new IOException("boom");
+                    });
+                    server.tools().register(tool -> tool.name("nested"), (ctx, request) -> {
+                        // the handler's own instrumentation, parented by whatever is current
+                        var inner = otel.getTracer("handler")
+                                .spanBuilder(HANDLER_SPAN)
+                                .startSpan();
+                        inner.end();
+                        return ToolResult.text("nested");
                     });
                     server.resources()
                             .register(

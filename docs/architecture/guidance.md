@@ -414,16 +414,38 @@ type.** Spring's lasting wound is four competing seams — `Filter`, `HandlerInt
 
 - The seam is `McpDispatcher.decodeAndHandleAsync` plus `dispatchNotification`, so `initialize`,
   every request, and every notification are covered by one chain.
+- **The seam is synchronous**: `intercept` returns an `McpOutcome`, blocking on the dispatch virtual
+  thread. Do not reintroduce `CompletionStage` here. Blocking is what makes chain and handler share
+  one stack, and that single stack is what keeps the outbound-stream binding
+  (`OutboundSseStreamMessageRouter`, thread-scoped) and any caller `ThreadLocal` — OpenTelemetry
+  `Context`, MDC — in scope for the handler. An async seam cannot promise that, and its
+  "call `proceed()` on the intercept thread or lose progress notifications" rule was a documented
+  footgun rather than a contract anything enforced.
+- **Failures are values, not a second channel.** `Chain.proceed()` never throws on the remainder's
+  behalf: `InterceptorChain` catches and routes through `McpOutcomes`, so an interceptor writes one
+  `switch` and no `catch`. `McpOutcome.Failure.cause()` exists so folding a throw into a value does
+  not lose the stack trace an audit log or tracer needs; only `Failure.error()` reaches the client.
 - Registration is explicit (`ServerBuilder.withInterceptors`), first registered = outermost.
   **No `ServiceLoader` discovery** — auto-discovery is what makes interceptor ordering unfixable
   once a third-party jar joins the chain.
-- `McpInterceptor` and `McpInterceptor.Chain` are *user-implemented*: adding a method breaks every
-  implementor, so they are frozen. `McpInvocation` is *library-implemented* and documented as
-  not-for-implementation, so it may grow methods freely. Classify any new SPI type this way before
-  adding it.
+- `McpInterceptor` is *user-implemented*: adding a method breaks every implementor, so it is
+  frozen. `McpInterceptor.Chain` and `McpInvocation` are *library-implemented* and documented as
+  not-for-implementation, so they may grow methods freely — which is what leaves room for a future
+  `proceed(McpInvocation)` (request rewriting). Do not ship a `Chain` test double that would make
+  application code implement it again. Classify any new SPI type this way before adding it.
 - The zero-interceptor path must stay allocation-free — it is the default for every existing user.
 - Outbound (server→client) interception, when it lands, is a second `Chain` on the same
-  `McpInterceptor`, never a rival interface.
+  `McpInterceptor`, never a rival interface. ⚠️ It must then be synchronous too, which requires
+  outbound writes to originate on a virtual thread rather than the event loop — verify that before
+  designing it.
+- ⚠️ A handler whose stage stays pending for the life of an SSE subscription
+  (`subscriptions/listen`) parks the dispatch thread for that long once an interceptor is
+  registered. Bounded by the open connection it belongs to, which costs more than the parked
+  continuation; see the `ponytail:` note on `McpDispatcher.handled` for the split to make if it
+  ever matters.
+- `ThreadLocal` in `OutboundSseStreamMessageRouter` becomes `ScopedValue` when the baseline reaches
+  Java 25 (final in JEP 506; the module is `@InternalApi`, so the swap is not breaking). Never put
+  `ScopedValue` or `StructuredTaskScope` in a public signature, or that bump turns into one.
 
 ## 🔴 Resolve protocol facts before they leave core
 

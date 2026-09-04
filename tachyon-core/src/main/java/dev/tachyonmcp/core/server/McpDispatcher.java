@@ -5,6 +5,7 @@ import dev.tachyonmcp.api.annotations.InternalApi;
 import dev.tachyonmcp.api.runtime.AttributeKey;
 import dev.tachyonmcp.api.server.domain.RequestId;
 import dev.tachyonmcp.api.server.domain.ServerError;
+import dev.tachyonmcp.api.server.features.HandlerFutures;
 import dev.tachyonmcp.api.server.interceptor.McpInterceptor;
 import dev.tachyonmcp.api.server.interceptor.McpOutcome;
 import dev.tachyonmcp.api.server.session.SessionIdGenerator;
@@ -31,9 +32,7 @@ import io.netty.handler.codec.http.HttpVersion;
 import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import org.jspecify.annotations.Nullable;
@@ -279,7 +278,7 @@ public class McpDispatcher {
                 // handle(), not handleAsync(executor): encoding is a cheap ByteBuf serialize and the
                 // completing thread is never the event loop — no need to burn a VT per request on it.
                 .handle((outcome, ex) -> ex != null
-                        ? errorResult(id, classifyThrowable(id, method, ex), context)
+                        ? errorResult(id, McpOutcomes.classify(id, method, ex), context)
                         : toDispatchResult(id, method, outcome, null, context));
     }
 
@@ -290,6 +289,11 @@ public class McpDispatcher {
      * <p>Classification happens here rather than after the chain unwinds, so an interceptor
      * observes the outcome the wire will actually carry -- above all the JSON-RPC error code, which
      * only the protocol codec can resolve.
+     *
+     * <p>With no interceptor registered the handler's stage is returned untouched, so the default
+     * path neither allocates a chain node nor blocks the dispatch thread on an async handler. The
+     * {@link McpInterceptor} seam is synchronous, so once one is registered the chain and the
+     * handler share this thread until the outcome exists.
      */
     private <I, O> CompletionStage<McpOutcome> decodeAndHandleAsync(
             String method, RpcMethodHandler<I, O> handler, DispatchContext context, @Nullable Object rawParams) {
@@ -297,19 +301,37 @@ public class McpDispatcher {
         if (interceptors.isEmpty()) {
             return classified(method, handler, context, rawParams);
         }
-        return InterceptorChain.run(
+        return CompletableFuture.completedStage(InterceptorChain.run(
                 interceptors,
                 new DispatchInvocation(method, context, rawParams),
                 context,
-                () -> classified(method, handler, context, rawParams));
+                () -> handled(method, handler, context, rawParams)));
     }
 
     private <I, O> CompletionStage<McpOutcome> classified(
             String method, RpcMethodHandler<I, O> handler, DispatchContext context, @Nullable Object rawParams) {
         return decodeAndHandle(handler, context, rawParams)
-                .handle((result, ex) -> ex != null
-                        ? McpOutcomes.failure(classifyThrowable(context.requestId(), method, ex), context)
-                        : McpOutcomes.of(result, context));
+                .handle((result, ex) ->
+                        ex != null ? McpOutcomes.failure(method, ex, context) : McpOutcomes.of(result, context));
+    }
+
+    /**
+     * Terminal of the interceptor chain: decodes, handles, and blocks for the result on this
+     * virtual thread.
+     *
+     * <p>ponytail: a handler whose stage stays pending for the life of an SSE subscription
+     * ({@code subscriptions/listen}) parks this thread for that long. Bounded by the open
+     * connection it belongs to, which costs more than the parked continuation. Split the terminal
+     * so a streaming handler returns at stream-establish if that ever shows up in a heap dump.
+     */
+    private <I, O> McpOutcome handled(
+            String method, RpcMethodHandler<I, O> handler, DispatchContext context, @Nullable Object rawParams) {
+        try {
+            I decoded = handler.decode(context, rawParams);
+            return McpOutcomes.of(HandlerFutures.joinInterruptibly(handler.handleAsync(context, decoded)), context);
+        } catch (Exception e) {
+            return McpOutcomes.failure(method, e, context);
+        }
     }
 
     private <I, O> CompletionStage<O> decodeAndHandle(
@@ -322,25 +344,10 @@ public class McpDispatcher {
         }
     }
 
-    /** Maps a thrown/failed handler into the protocol-neutral error the response will carry. */
-    private ServerError classifyThrowable(@Nullable RequestId id, String method, Throwable ex) {
-        var unwrapped = ex instanceof CompletionException ce && ce.getCause() != null ? ce.getCause() : ex;
-        if (unwrapped instanceof CancellationException) {
-            logger.debug("Handler cancelled: method={}, id={}", method, id);
-            return ServerErrors.internalError("Internal error");
-        }
-        if (unwrapped instanceof RequestMappingException rme) {
-            logger.debug("Request mapping failed: method={}, id={}: {}", method, id, rme.getMessage());
-            return rme.error();
-        }
-        logger.warn("Handler exception: method={}, id={}: {}", method, id, unwrapped.getMessage(), unwrapped);
-        return ServerErrors.internalError("Internal error");
-    }
-
     private DispatchResult toDispatchResult(
             RequestId id, String method, McpOutcome outcome, @Nullable String sessionId, DispatchContext context) {
         return switch (outcome) {
-            case McpOutcome.Failure(var error, var ignored) -> {
+            case McpOutcome.Failure(var error, var ignoredCode, var ignoredCause) -> {
                 logger.debug("Handler error for {}: {}", method, error.message());
                 yield errorResult(id, error, context);
             }
@@ -369,20 +376,22 @@ public class McpDispatcher {
         if (interceptors.isEmpty()) {
             return handleNotification(method, params, sessionId, channelContext);
         }
-        // A notification has no response, so its answer is always Accepted: an interceptor that
-        // defers cannot hold one up, and one that rejects only suppresses the handler.
+        // A notification has no response, so its answer is always Accepted: an interceptor can only
+        // suppress the handler, never change what the client is told. The transport has already
+        // acked before dispatching here (see McpOperationHandler), so blocking the chain is free.
         var context = dispatchContext(channelContext);
-        InterceptorChain.run(interceptors, new DispatchInvocation(method, context, params), context, () -> {
+        var outcome =
+                InterceptorChain.run(interceptors, new DispatchInvocation(method, context, params), context, () -> {
                     handleNotification(method, params, sessionId, channelContext);
-                    return CompletableFuture.<McpOutcome>completedStage(new McpOutcome.Success(null));
-                })
-                .whenComplete((outcome, ex) -> {
-                    if (ex != null) {
-                        logger.warn("Notification interceptor failed: method={}: {}", method, ex.getMessage(), ex);
-                    } else if (outcome instanceof McpOutcome.Failure(var error, var ignored)) {
-                        logger.debug("Notification rejected by interceptor: method={}: {}", method, error.message());
-                    }
+                    return new McpOutcome.Success(null);
                 });
+        if (outcome instanceof McpOutcome.Failure(var error, var ignoredCode, var cause)) {
+            if (cause != null) {
+                logger.warn("Notification interceptor failed: method={}: {}", method, cause.getMessage(), cause);
+            } else {
+                logger.debug("Notification rejected by interceptor: method={}: {}", method, error.message());
+            }
+        }
         return DispatchResult.Accepted.INSTANCE;
     }
 
@@ -481,7 +490,7 @@ public class McpDispatcher {
                 .thenCompose(stage -> stage)
                 .handle((outcome, ex) -> {
                     if (ex != null) {
-                        return errorResult(id, classifyThrowable(id, METHOD_INITIALIZE, ex), ic);
+                        return errorResult(id, McpOutcomes.classify(id, METHOD_INITIALIZE, ex), ic);
                     }
                     final var session = ic.session();
                     var sessionId = session != null ? session.id() : null;

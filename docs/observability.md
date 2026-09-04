@@ -1,8 +1,12 @@
 # Observability
 
-Tachyon has one cross-cutting seam: `McpInterceptor`. It wraps **every** inbound MCP operation —
-`initialize`, every request, every notification — and is where tracing, auditing, authorization and
-rate limiting belong. There is deliberately no second per-request hook type.
+Tachyon has one cross-cutting seam: `McpInterceptor`. It wraps every MCP operation that reaches a
+handler — `initialize`, requests and notifications alike — and is where tracing, auditing,
+authorization and rate limiting belong. There is deliberately no second per-request hook type.
+
+⚠️ Requests refused before handler lookup do **not** reach the chain: unknown method, unknown or
+missing session, a method gated off by a disabled extension. An audit or metrics interceptor
+undercounts exactly those.
 
 ## The interceptor SPI
 
@@ -10,22 +14,29 @@ rate limiting belong. There is deliberately no second per-request hook type.
 package dev.tachyonmcp.api.server.interceptor;
 
 public interface McpInterceptor {
-    CompletionStage<McpOutcome> intercept(McpInvocation invocation, Chain chain);
+    McpOutcome intercept(McpInvocation invocation, Chain chain) throws Exception;
 
     interface Chain {
-        CompletionStage<McpOutcome> proceed();
+        /** Runs the rest of the chain and the handler, blocking until they produce an outcome. */
+        McpOutcome proceed();
 
         /** Short-circuits; the wire code is resolved for you. */
-        CompletionStage<McpOutcome> reject(ServerError error);
+        McpOutcome reject(ServerError error);
     }
 }
 
 public sealed interface McpOutcome {
     record Success(@Nullable Object result) implements McpOutcome {}
     record PayloadFailure(@Nullable Object result) implements McpOutcome {}
-    record Failure(ServerError error, int jsonRpcCode) implements McpOutcome {}
+    record Failure(ServerError error, int jsonRpcCode, @Nullable Throwable cause) implements McpOutcome {}
 }
 ```
+
+The seam is **synchronous**: `intercept` runs on the dispatch virtual thread and blocks until the
+rest of the chain is done, so an interceptor is ordinary sequential code — `try/finally` for timing,
+a `for` loop for retry, a `Semaphore` for a concurrency bound. Blocking is the point of a virtual
+thread; chain and handler share one stack, which is what keeps the handler's outbound stream and
+any `ThreadLocal` context (OpenTelemetry's `Context`, MDC) in scope for the whole dispatch.
 
 `McpOutcome` is what the dispatcher produces *after* resolving the result against the negotiated
 protocol version, so an interceptor sees what the wire will actually carry:
@@ -34,7 +45,7 @@ protocol version, so an interceptor sees what the wire will actually carry:
 |---|---|
 | `Success` | the response carries the handler's result |
 | `PayloadFailure` | JSON-RPC success, but the payload reports failure — today a `tools/call` with `isError: true` |
-| `Failure` | JSON-RPC error; `jsonRpcCode` is this protocol version's code |
+| `Failure` | JSON-RPC error; `jsonRpcCode` is this protocol version's code, `cause()` the exception it came from (or `null`) |
 
 🔴 Never re-derive a JSON-RPC code from `ServerError.Kind`. MCP 2025-11-25 and 2026-07-28 map
 several kinds differently (`RESOURCE_NOT_FOUND` is `-32002` on one and `-32602` on the other), which
@@ -75,24 +86,54 @@ TachyonServer(port = 8080) {
 ### Contract
 
 - **One instance serves every concurrent operation.** Implementations must be thread-safe and keep
-  no per-request state in fields — keep it in local variables and close over it in the returned
-  stage. 🔴 Not in `invocation.context()`: that attribute space is scoped to the *connection*, so
-  concurrent requests on one connection share it.
-- `intercept` runs on the handler's virtual thread. Blocking for I/O is fine; `synchronized` is not
-  (it pins the carrier thread) — use `ReentrantLock`.
-- Call `chain.proceed()` from the `intercept` thread. The stage it returns may complete on another.
-  🔴 Deferring `proceed()` to another thread detaches the handler from the dispatch's outbound
-  stream, silently dropping any progress notification the handler sends. Delay the *response*, never
-  the call to `proceed()`.
+  no per-request state in fields — keep it in local variables. 🔴 Not in `invocation.context()`:
+  that attribute space is scoped to the *connection*, so concurrent requests on one connection
+  share it.
+- Blocking for I/O is fine; `synchronized` is not (it pins the carrier thread) — use
+  `ReentrantLock`. The chain and the handler share one stack, so a pinning interceptor pins the
+  handler too.
+- **Failures are values.** `chain.proceed()` returns `Failure` for a throwing handler and for a
+  throwing downstream interceptor alike, and never throws on their behalf — one `switch`, no
+  `catch`. Use `finally` to cover an exception thrown by *this* interceptor.
+- An exception thrown out of `intercept` becomes a JSON-RPC internal error, exactly as a throwing
+  handler does, and reaches an outer interceptor as `Failure.cause()`. Only the sanitized
+  `Failure.error()` goes to the client.
 - An `McpInvocation` is valid only during the interception; `sessionId()` reads through the live
   dispatch. Copy out what you need rather than retaining it.
 - Returning `chain.reject(error)` instead of `chain.proceed()` short-circuits the handler — the
   authorization and rate-limiting path.
-- Errors travel as a failed `CompletionStage`. An exception thrown out of `intercept` is mapped to
-  a JSON-RPC internal error, exactly as a throwing handler is.
+- `chain.proceed()` may be called more than once; each call re-runs the rest of the chain and the
+  handler.
 
-Implement `McpInterceptor` and `Chain`; do **not** implement `McpInvocation` — it gains methods
-between releases.
+Implement `McpInterceptor`; do **not** implement `Chain` or `McpInvocation` — both are
+library-implemented and gain methods between releases. Test an interceptor against a running server.
+
+### Bounding concurrency
+
+Nothing in Tachyon caps in-flight requests: an unbounded virtual-thread executor will happily run
+10k slow tool calls against a downstream that tolerates 500. A synchronous chain makes the bound six
+lines, and `try/finally` cannot leak a permit:
+
+```java
+final class AdmissionInterceptor implements McpInterceptor {
+
+    private final Semaphore permits = new Semaphore(512);
+
+    @Override
+    public McpOutcome intercept(McpInvocation invocation, Chain chain) throws Exception {
+        if (!permits.tryAcquire(50, TimeUnit.MILLISECONDS)) {
+            return chain.reject(new ServerError(ServerError.Kind.INVALID_REQUEST, "Server overloaded"));
+        }
+        try {
+            return chain.proceed();
+        } finally {
+            permits.release();
+        }
+    }
+}
+```
+
+Register it outermost so the permit covers everything behind it.
 
 ## OpenTelemetry
 
@@ -194,7 +235,7 @@ final class AuditInterceptor implements McpInterceptor {
     private static final Logger log = LoggerFactory.getLogger(AuditInterceptor.class);
 
     @Override
-    public CompletionStage<Object> intercept(McpInvocation invocation, Chain chain) {
+    public McpOutcome intercept(McpInvocation invocation, Chain chain) {
         // Copied up front: the invocation is only valid for the duration of the interception.
         final var method = invocation.method();
         final var target = invocation.targetName().orElse("-");
@@ -202,14 +243,16 @@ final class AuditInterceptor implements McpInterceptor {
         final var sessionId = invocation.sessionId();
         final var startNanos = System.nanoTime();
 
-        return chain.proceed().whenComplete((outcome, error) -> log.info(
+        final var outcome = chain.proceed();
+        log.info(
                 "mcp method={} target={} id={} session={} outcome={} ms={}",
                 method,
                 target,
                 requestId,
                 sessionId,
-                error != null ? "failed" : describe(outcome),
-                (System.nanoTime() - startNanos) / 1_000_000));
+                describe(outcome),
+                (System.nanoTime() - startNanos) / 1_000_000);
+        return outcome;
     }
 
     private static String describe(McpOutcome outcome) {

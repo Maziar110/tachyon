@@ -12,16 +12,17 @@ import org.jspecify.annotations.Nullable;
  * View of the single MCP operation an {@link McpInterceptor} is wrapped around — the request or
  * notification as it arrived on the wire.
  *
- * <p><strong>Valid only for the duration of the interception.</strong> {@link #method()}, {@link
- * #targetName()}, {@link #resourceUri()} and {@link #params()} are fixed by the inbound message,
- * but {@link #sessionId()} and {@link #protocolVersion()} read through the live dispatch — {@code
- * sessionId()} is {@code null} when an {@code initialize} interception starts and non-null once the
- * session exists. Do not retain the invocation past the stage returned by {@link
- * McpInterceptor#intercept}; copy out the values you need instead.
+ * <p><strong>One instance per dispatched operation, valid only for the duration of the
+ * interception.</strong> Everything but {@link #sessionId()} and {@link #protocolVersion()} is
+ * fixed by the inbound message; those two read through the live dispatch. Do not retain the
+ * invocation past the {@link McpInterceptor#intercept} call; copy out what you need.
  *
- * <p><strong>Not for implementation outside Tachyon.</strong> This is a consumer interface: methods
- * may be added in any release, so implementing it in application code will break on upgrade. Only
- * {@link McpInterceptor} and {@link McpInterceptor.Chain} are meant to be implemented.
+ * <p>Per-operation is the <em>instance</em>, not the attribute space behind {@link #context()},
+ * which every request on the connection shares — see that method.
+ *
+ * <p><strong>Not for implementation outside Tachyon.</strong> Methods may be added in any release,
+ * so implementing it in application code will break on upgrade. Only {@link McpInterceptor} is
+ * meant to be implemented.
  *
  * @author Konstantin Pavlov
  */
@@ -45,10 +46,13 @@ public interface McpInvocation {
     RequestId requestId();
 
     /**
-     * Returns the MCP session id, or {@code null} in stateless mode and before {@code initialize}
-     * has established a session.
+     * Returns the MCP session id, or {@code null} in stateless mode.
      *
-     * @return the session id, or {@code null}
+     * <p>Non-null for every operation on a stateful session, {@code initialize} included — the
+     * dispatcher establishes the session before running the chain, so an interceptor wrapping
+     * {@code initialize} already sees the id the response will carry.
+     *
+     * @return the session id, or {@code null} in stateless mode
      */
     @Nullable
     String sessionId();
@@ -65,9 +69,8 @@ public interface McpInvocation {
      * tools/call} and the prompt name for {@code prompts/get} — or empty when this operation names
      * no target.
      *
-     * <p>Read straight off the wire params, so it is available without decoding the request and
-     * without parsing {@link #params()}. This is what an authorization interceptor gates on and
-     * what a tracing interceptor uses for the span name.
+     * <p>Read straight off the wire params, so it costs no decode and no parse of {@link #params()}.
+     * This is what an authorization interceptor gates on and a tracing interceptor names spans by.
      *
      * @return the targeted tool or prompt name, or empty
      */
@@ -101,10 +104,9 @@ public interface McpInvocation {
      * outbound notifications, and the attribute space.
      *
      * <p>🔴 That attribute space ({@link InteractionContext#get}/{@link InteractionContext#set}) is
-     * scoped to the <em>connection</em>, not to this operation: concurrent requests on one
-     * connection share it, and a value survives into later requests. It is not a place to stash
-     * per-request state such as a timer or a span — keep that in local variables and close over it
-     * in the stage returned by {@link McpInterceptor#intercept}.
+     * scoped to the <em>connection</em>, not to this operation: concurrent requests share it and a
+     * value survives into later ones. Not a place for per-request state such as a timer or a span —
+     * {@link McpInterceptor#intercept} is ordinary blocking code, so keep that in locals.
      *
      * @return the interaction context
      */

@@ -34,7 +34,6 @@ import io.opentelemetry.semconv.NetworkAttributes;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.CompletionStage;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -122,7 +121,7 @@ public final class McpTelemetryInterceptor implements McpInterceptor {
     }
 
     @Override
-    public CompletionStage<McpOutcome> intercept(McpInvocation invocation, Chain chain) {
+    public McpOutcome intercept(McpInvocation invocation, Chain chain) {
         // Built once: the metric keeps only the low-cardinality half, the span gets all of it.
         // Session and request ids must never reach the histogram -- one time series per request.
         final var shared = sharedAttributes(invocation);
@@ -132,9 +131,11 @@ public final class McpTelemetryInterceptor implements McpInterceptor {
                 .setAllAttributes(spanOnlyAttributes(invocation))
                 .startSpan();
         final var startNanos = System.nanoTime();
+        // The scope encloses the handler, so a span the handler starts is a child of this one.
         try (var ignored = span.makeCurrent()) {
-            return chain.proceed()
-                    .whenComplete((outcome, error) -> end(span, shared, invocation, outcome, error, startNanos));
+            final var outcome = chain.proceed();
+            end(span, shared, invocation, outcome, null, startNanos);
+            return outcome;
         } catch (RuntimeException | Error e) {
             end(span, shared, invocation, null, e, startNanos);
             throw e;
@@ -214,8 +215,7 @@ public final class McpTelemetryInterceptor implements McpInterceptor {
             long startNanos) {
         final var metricAttributes = Attributes.builder().putAll(shared);
         if (error != null) {
-            final var unwrapped =
-                    error instanceof CompletionException ce && ce.getCause() != null ? ce.getCause() : error;
+            final var unwrapped = unwrap(error);
             span.recordException(unwrapped);
             span.setStatus(StatusCode.ERROR, Objects.toString(unwrapped.getMessage(), ""));
             classify(span, metricAttributes, unwrapped.getClass().getName());
@@ -239,16 +239,26 @@ public final class McpTelemetryInterceptor implements McpInterceptor {
         switch (outcome) {
             case McpOutcome.Success ignored -> {}
             case McpOutcome.PayloadFailure ignored -> classify(span, metricAttributes, TOOL_ERROR);
-            case McpOutcome.Failure(var error, var jsonRpcCode) -> {
+            case McpOutcome.Failure(var error, var jsonRpcCode, var cause) -> {
                 final var code = String.valueOf(jsonRpcCode);
                 span.setAttribute(RPC_RESPONSE_STATUS_CODE, code);
                 metricAttributes.put(RPC_RESPONSE_STATUS_CODE, code);
                 classify(span, metricAttributes, error.kind().name());
+                if (cause != null) {
+                    // A handler or inner interceptor threw; the dispatcher folded it into the
+                    // outcome, so this is the only place the stack trace is still available.
+                    span.recordException(unwrap(cause));
+                }
                 if (!CALLER_FAULT_CODES.contains(jsonRpcCode)) {
                     span.setStatus(StatusCode.ERROR, error.message());
                 }
             }
         }
+    }
+
+    /** Strips the {@code CompletionException} an async handler's failure may still be wrapped in. */
+    private static Throwable unwrap(Throwable error) {
+        return error instanceof CompletionException ce && ce.getCause() != null ? ce.getCause() : error;
     }
 
     private static void classify(Span span, AttributesBuilder metricAttributes, String errorType) {
