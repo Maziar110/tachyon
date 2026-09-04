@@ -54,9 +54,9 @@ passed straight through.
 
 How the value reaches the app depends on the platform.
 
-- Some platforms hand the app its assigned hostname in the environment. Read it
-  at startup and the deployment is one pass. Use the platform's bare-hostname
-  variable, not its URL variable.
+- Some platforms hand the app its own hostname in the environment. Read it at
+  startup and the deployment is one pass. Take the bare-hostname variable if the
+  platform offers both, since the full-URL one is rejected here.
 - Otherwise the hostname is not known until the app exists, so it is two passes:
   deploy, read the assigned hostname, set it, deploy again.
 
@@ -118,8 +118,16 @@ One deployment of it, on [Dockhold](https://dockhold.eu):
 [tachyon-weather-dockhold](https://github.com/Maziar110/tachyon-weather-dockhold).
 That repo is a Dockerfile which fetches a tagged Tachyon release, builds this one
 example, and runs it on a trimmed `jlink` runtime. It sets `HOST=0.0.0.0`, and
-its entrypoint fills `ALLOWED_HOST` from the hostname the platform hands the
-container, so the deployment is one pass:
+its entrypoint defaults `ALLOWED_HOST` to `DOCKHOLD_APP_HOSTNAME`, the assigned
+hostname, so the deployment is one pass:
+
+```sh
+[ -z "$ALLOWED_HOST" ] && [ -n "$DOCKHOLD_APP_HOSTNAME" ] \
+    && export ALLOWED_HOST="$DOCKHOLD_APP_HOSTNAME"
+```
+
+`DOCKHOLD_APP_HOSTNAME` is the bare authority. There is a `DOCKHOLD_APP_URL`
+too, which carries the scheme and is the wrong one for `allowedHosts`.
 
 ```text
 https://app.dockhold.eu/new?repo=https://github.com/Maziar110/tachyon-weather-dockhold
