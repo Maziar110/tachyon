@@ -34,6 +34,10 @@ default, and it accepts only `localhost` and loopback authorities. A public
 hostname is neither. Until `allowedHosts` names it, the server answers
 `403 Forbidden` to every request that arrives through that hostname.
 
+`host` and `allowedHosts` are unrelated. `host` decides which interface the
+server binds. `allowedHosts` decides which `Host` headers it answers. Binding
+more widely never affects the `403`.
+
 ```java
 .network(n -> {
     var allowedHost = System.getenv("ALLOWED_HOST");
@@ -44,10 +48,17 @@ hostname is neither. Until `allowedHosts` names it, the server answers
 ```
 
 Entries are bare authorities, not URLs. `example.com` matches that host on any
-port, `example.com:8096` only that port.
+port, `example.com:8096` only that port. An entry holding a scheme or a path is
+rejected when the server is built, so a variable containing a full URL cannot be
+passed straight through.
 
-Most platforms do not reveal the hostname until the app exists, so deployment is
-two passes: deploy, read the assigned hostname, set it, deploy again.
+How the value reaches the app depends on the platform.
+
+- Some platforms hand the app its assigned hostname in the environment. Read it
+  at startup and the deployment is one pass. Use the platform's bare-hostname
+  variable, not its URL variable.
+- Otherwise the hostname is not known until the app exists, so it is two passes:
+  deploy, read the assigned hostname, set it, deploy again.
 
 ### Verify the guard is on
 
@@ -57,12 +68,21 @@ request the server has to refuse. A trailing dot is the same host to DNS but a
 different string to the guard:
 
 ```shell
-curl -s -o /dev/null -w '%{http_code}\n' -X POST https://YOUR-HOST/mcp
-curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Host: YOUR-HOST.' https://YOUR-HOST/mcp
+probe() {
+    code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Host: $1" https://YOUR-HOST/mcp)
+    case "$code" in
+        000) echo "$1: no HTTP response (DNS, TLS or connection failure)" ;;
+        *)   echo "$1: $code" ;;
+    esac
+}
+probe 'YOUR-HOST'
+probe 'YOUR-HOST.'
 ```
 
 The second must return `403`. If both return the same code, the `Host` check is
-not filtering anything and the first result proved nothing.
+not filtering anything and the first result proved nothing. Treat `000` as a
+failed probe rather than a result: two failed requests also match each other,
+and they say nothing about the guard.
 
 ## Browser clients
 
@@ -81,9 +101,11 @@ events in memory, so more than one instance needs sticky routing or shared
 
 ## Containers
 
-- The JVM has to be PID 1, or it never receives the platform's stop signal and
-  `shutdownGracePeriod` never runs. Use the exec form of `CMD`, or `exec` the
-  JVM from an entrypoint script.
+- The JVM has to receive the platform's stop signal, or `shutdownGracePeriod`
+  never runs. That means the JVM is PID 1, or its parent forwards signals to it
+  (an init process, or an entrypoint that `exec`s the JVM). The usual failure is
+  a shell wrapper that stays PID 1 and swallows the signal. The exec form of
+  `CMD` is the safe default.
 - The filesystem is ephemeral on most platforms. Anything written at runtime is
   gone after the next deploy.
 
@@ -95,13 +117,13 @@ events in memory, so more than one instance needs sticky routing or shared
 One deployment of it, on [Dockhold](https://dockhold.eu):
 [tachyon-weather-dockhold](https://github.com/Maziar110/tachyon-weather-dockhold).
 That repo is a Dockerfile which fetches a tagged Tachyon release, builds this one
-example, and runs it on a trimmed `jlink` runtime. It sets `HOST=0.0.0.0` and
-leaves `ALLOWED_HOST` for the second pass described above. Deploy form:
+example, and runs it on a trimmed `jlink` runtime. It sets `HOST=0.0.0.0`, and
+its entrypoint fills `ALLOWED_HOST` from the hostname the platform hands the
+container, so the deployment is one pass:
 
-```
+```text
 https://app.dockhold.eu/new?repo=https://github.com/Maziar110/tachyon-weather-dockhold
 ```
 
-Set `ALLOWED_HOST` to the hostname the platform assigns, deploy again, then run
-the two `curl` checks above. Platform limits and pricing are documented at
-[dockhold.eu](https://dockhold.eu).
+Deploy it, then run the two `probe` calls above against the assigned hostname.
+Platform limits and pricing are documented at [dockhold.eu](https://dockhold.eu).
