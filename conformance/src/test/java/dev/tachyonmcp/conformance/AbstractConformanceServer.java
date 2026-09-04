@@ -80,7 +80,10 @@ abstract class AbstractConformanceServer {
                 "required": ["%s"]
             }
             """.formatted(propName, propType, propName));
-        return FormInputRequest.builder().message(message).requestedSchema(jsonSchema).build();
+        return FormInputRequest.builder()
+                .message(message)
+                .requestedSchema(jsonSchema)
+                .build();
     }
 
     protected static RpcMethodRequest buildSamplingRequest(String questionText) {
